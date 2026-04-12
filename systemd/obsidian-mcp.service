@@ -1,0 +1,23 @@
+[Unit]
+Description=Bobsidian MCP Server
+Documentation=https://github.com/${MCP_REPO}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=obsidian
+Group=obsidian
+WorkingDirectory=/home/obsidian/obsidian-web-mcp
+EnvironmentFile=/home/obsidian/.config/obsidian-mcp/env
+ExecStart=/home/obsidian/.local/bin/uv run vault-mcp
+Restart=on-failure
+RestartSec=10s
+StartLimitBurst=5
+StartLimitIntervalSec=60s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=obsidian-mcp
+
+[Install]
+WantedBy=multi-user.target

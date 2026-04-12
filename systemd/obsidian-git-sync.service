@@ -1,0 +1,9 @@
+[Unit]
+Description=Vault Git Sync
+After=obsidian-headless-sync.service
+
+[Service]
+Type=oneshot
+User=obsidian
+EnvironmentFile=/home/obsidian/.config/obsidian-sync/env
+ExecStart=/home/obsidian/obsidian-sync/scripts/obsidian-git-sync.sh
