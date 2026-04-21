@@ -21,6 +21,7 @@ Obsidian Sync is the source of truth. The LXC runs Headless Sync to keep a local
 | Git Sync | `obsidian-git.timer` (5 min) | Pull remote, commit changes, push |
 | MCP Server | `obsidian-mcp.service` | Bobsidian — vault read/write over MCP |
 | Headless Heartbeat | cron (1 min) | Uptime Kuma push if sync log is fresh |
+| MCP Heartbeat | `obsidian-mcp.service` (in-process task) | Uptime Kuma push while MCP is running (opt-in via env) |
 
 **Naming note:** The `ob` CLI is the [`obsidian-headless`](https://www.npmjs.com/package/obsidian-headless) npm package (not `obsidian-sync`). Two nearby-but-distinct paths:
 
@@ -134,7 +135,7 @@ Required values in `obsidian-mcp/env`:
 
 Optional values in `obsidian-mcp/env`:
 
-- `VAULT_MCP_HEARTBEAT_URL` + `VAULT_MCP_HEARTBEAT_INTERVAL` — MCP server's own Kuma push heartbeat. Create a third "Push" monitor if you want to alert on MCP-specific outages (distinct from git sync / headless)
+- `VAULT_MCP_HEARTBEAT_URL` + `VAULT_MCP_HEARTBEAT_INTERVAL` — MCP server's own Kuma push heartbeat. Alerts on MCP-specific outages (distinct from git sync / headless — those can be healthy while the MCP process is wedged). Set up the matching `(Obsidian) MCP` monitor in Step 6
 - `VAULT_MCP_STATELESS` (default `true`) / `VAULT_MCP_PATH` (default `/mcp`) — transport tuning. Defaults match what Claude's remote connector needs; only override if you know why
 
 ### 4. Headless Sync — one-time interactive setup
@@ -190,12 +191,13 @@ Any drift between cloud state and GitHub's last commit now shows as uncommitted 
 
 ### 6. Uptime Kuma monitors
 
-Create two Push-type monitors in Uptime Kuma and paste the push URLs into `/home/bobsidian/.config/obsidian-sync/env`:
+Create Push-type monitors in Uptime Kuma and paste their URLs into the env files:
 
-| Name | Interval | Retries | Notes |
-|------|----------|---------|-------|
-| `Obsidian Headless Sync` | 120s | 3 | Cron runs every minute, pings only if sync log fresh |
-| `Obsidian Git Sync` | 600s | 3 | Timer runs every 5 min, pings unconditionally |
+| Name | Interval | Retries | Push URL goes in | Notes |
+|------|----------|---------|------------------|-------|
+| `Obsidian Headless Sync` | 120s | 3 | `obsidian-sync/env` (`OBSIDIAN_SYNC_HEARTBEAT_URL`) | Cron runs every minute, pings only if sync log fresh |
+| `Obsidian Git Sync` | 600s | 3 | `obsidian-sync/env` (`GIT_SYNC_HEARTBEAT_URL`) | Timer runs every 5 min, pings unconditionally |
+| `(Obsidian) MCP` | 120s | 3 | `obsidian-mcp/env` (`VAULT_MCP_HEARTBEAT_URL`) | MCP process pings itself every 60s while running (optional — skip if you only care about sync health) |
 
 ### 7. Start services
 
@@ -237,6 +239,10 @@ sudo -u bobsidian crontab -l | grep heartbeat.sh
 journalctl -u obsidian-mcp -n 50
 journalctl -u obsidian-sync -n 50
 journalctl -u obsidian-git --since "10 min ago"
+
+# MCP heartbeat wired? (only if VAULT_MCP_HEARTBEAT_URL is set)
+journalctl -u obsidian-mcp --no-pager | grep "Heartbeat enabled"
+# Expect: "Heartbeat enabled (interval: 60s)" once per MCP session init
 
 # Test MCP write — make a small change via Claude, then check:
 git -C "/home/bobsidian/obsidian-vault" log --oneline -5
