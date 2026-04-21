@@ -22,6 +22,15 @@ Obsidian Sync is the source of truth. The LXC runs Headless Sync to keep a local
 | MCP Server | `obsidian-mcp.service` | Bobsidian — vault read/write over MCP |
 | Headless Heartbeat | cron (1 min) | Uptime Kuma push if sync log is fresh |
 
+**Naming note:** The `ob` CLI is the [`obsidian-headless`](https://www.npmjs.com/package/obsidian-headless) npm package (not `obsidian-sync`). Two nearby-but-distinct paths:
+
+| Path | Owner | Contents |
+|------|-------|----------|
+| `~/.config/obsidian-headless/` | `ob` CLI (npm package) | Login credentials, per-vault `state.db`, `sync/<vault-id>/sync.log` |
+| `~/.config/obsidian-sync/` | This repo | Our env file (`GIT_SYNC_HEARTBEAT_URL`, `OBSIDIAN_SYNC_HEARTBEAT_URL`) |
+
+If you're troubleshooting `ob` state, look in `obsidian-headless/`. If you're editing heartbeat URLs, look in `obsidian-sync/`.
+
 ## Commit Convention
 
 | Prefix | Source |
@@ -132,7 +141,7 @@ Optional values in `obsidian-mcp/env`:
 
 Two interactive steps before `obsidian-sync.service` can start. Both are one-time.
 
-**4a. Log in** — stores credentials in `~/.config/obsidian-sync/`:
+**4a. Log in** — stores credentials in `~/.config/obsidian-headless/`:
 
 ```bash
 sudo -u bobsidian ob login
@@ -150,23 +159,34 @@ sudo -u bobsidian ob sync-setup --path /home/bobsidian/obsidian-vault
 Verify:
 
 ```bash
-ls /home/bobsidian/.config/obsidian-sync/
+ls /home/bobsidian/.config/obsidian-headless/
 # should show a vault-ID directory containing state.db
 ```
 
 ### 5. Vault git history
 
-Headless Sync populates the vault dir with cloud content on first run but doesn't initialise git — `obsidian-git.timer` needs a git repo at `VAULT_DIR`, otherwise every tick fails silently. Seed git history from GitHub:
+Headless Sync populates the vault dir with cloud content on first run but doesn't initialise git — `obsidian-git.timer` needs a git repo at `VAULT_DIR`, otherwise every tick fails silently. Do this **before** starting the timer in Step 7; if the timer is running already (re-deploy / recovery), stop it first so a tick can't fire mid-dance and commit broken state:
+
+```bash
+sudo systemctl stop obsidian-git.timer    # no-op on a fresh deploy
+```
+
+Seed git history from GitHub:
 
 ```bash
 cd /home/bobsidian/obsidian-vault
 sudo -u bobsidian git init -b main
 sudo -u bobsidian git remote add origin git@github.com:${VAULT_REPO}.git
 sudo -u bobsidian git fetch origin main
-sudo -u bobsidian git reset origin/main    # adopt GitHub HEAD, keep working tree
+sudo -u bobsidian git reset origin/main                  # adopt GitHub HEAD, keep working tree
+sudo -u bobsidian git checkout HEAD -- .gitignore        # restore dotfiles (see note below)
 ```
 
 Any drift between cloud state and GitHub's last commit now shows as uncommitted changes. The first `obsidian-git.timer` tick commits them as `sync: auto` and pushes — the catch-up push that reconciles GitHub to cloud truth.
+
+**Why the `.gitignore` checkout:** Obsidian Sync doesn't replicate dotfiles, so `.gitignore` never lands in the working tree via Headless Sync. After `git reset origin/main`, git sees it as "deleted" — if you skip the restore, the next timer tick commits that deletion and propagates it to GitHub. The explicit `checkout HEAD -- .gitignore` re-materialises it from the just-fetched tree.
+
+**Ordering rule:** vault must be a valid git repo **before** `obsidian-git.timer` starts. Keep the timer stopped until Step 7.
 
 ### 6. Uptime Kuma monitors
 
@@ -187,7 +207,9 @@ sudo systemctl start obsidian-mcp
 
 ### 8. Cloudflare Tunnel
 
-Configure the tunnel to route your public hostname (e.g. `${PUBLIC_HOST}/mcp`) to `http://localhost:8420/mcp` on the LXC. This is done in the Cloudflare Zero Trust dashboard — not handled by this repo.
+Configure the tunnel to route the **entire public hostname** (e.g. `${PUBLIC_HOST}`) to `http://localhost:8420` on the LXC. This is done in the Cloudflare Zero Trust dashboard — not handled by this repo.
+
+**Do not path-scope the rule to `/mcp`.** OAuth discovery requests hit `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` at the hostname root — a `/mcp`-scoped rule makes those 404, and Claude's connector fails to authenticate with no obvious error. Route hostname-wide and let the MCP server answer its own paths.
 
 ### 9. Claude custom connector
 
@@ -206,7 +228,10 @@ In Claude (claude.ai/settings/connectors), add a custom MCP server:
 # All services running?
 systemctl status obsidian-sync obsidian-mcp
 systemctl status obsidian-git.timer
-sudo -u bobsidian crontab -l
+
+# Heartbeat cron installed? (setup.sh can silently skip if re-run against a partial state)
+sudo -u bobsidian crontab -l | grep heartbeat.sh
+# Expect: * * * * * /home/bobsidian/obsidian-sync/scripts/heartbeat.sh
 
 # Recent logs
 journalctl -u obsidian-mcp -n 50
@@ -223,7 +248,7 @@ git -C "/home/bobsidian/obsidian-vault" log --oneline -5
 ### Headless Sync stuck / disconnected
 
 ```bash
-tail -20 /home/bobsidian/.config/obsidian-sync/sync/*/sync.log
+tail -20 /home/bobsidian/.config/obsidian-headless/sync/*/sync.log
 ```
 
 If stuck on "Connecting..." or last entry is old:

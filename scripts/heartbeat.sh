@@ -15,7 +15,7 @@ ENV_FILE="/home/bobsidian/.config/obsidian-sync/env"
 [ -f "$ENV_FILE" ] && . "$ENV_FILE"
 
 HEARTBEAT_URL="${OBSIDIAN_SYNC_HEARTBEAT_URL:-}"
-LOG_DIR="/home/bobsidian/.config/obsidian-sync/sync"
+LOG_DIR="/home/bobsidian/.config/obsidian-headless/sync"
 
 if [ -z "$HEARTBEAT_URL" ]; then
     exit 0
