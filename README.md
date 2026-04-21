@@ -78,6 +78,11 @@ On the LXC, as root:
 # Create the bobsidian user if it doesn't exist
 id bobsidian || adduser --disabled-password --gecos "" bobsidian
 usermod -aG sudo bobsidian
+
+# Set a password so sudo works. --disabled-password above skips this;
+# without it, `sudo -u bobsidian ...` from root is fine but bobsidian
+# can't invoke sudo themselves (e.g. for `sudoedit`).
+passwd bobsidian
 ```
 
 Generate an SSH deploy key for GitHub (as `bobsidian`):
