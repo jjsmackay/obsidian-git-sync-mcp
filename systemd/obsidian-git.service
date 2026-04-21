@@ -1,0 +1,9 @@
+[Unit]
+Description=Obsidian Git Sync
+After=obsidian-sync.service
+
+[Service]
+Type=oneshot
+User=bobsidian
+EnvironmentFile=/home/bobsidian/.config/obsidian-sync/env
+ExecStart=/home/bobsidian/obsidian-sync/scripts/git-sync.sh

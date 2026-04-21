@@ -4,17 +4,17 @@
 # Run as root. Re-running is safe; each step is idempotent.
 #
 # Usage:
-#   sudo bash /home/obsidian/obsidian-sync/scripts/setup.sh
+#   sudo bash /home/bobsidian/obsidian-sync/scripts/setup.sh
 
 set -euo pipefail
 
-MCP_USER="obsidian"
-MCP_HOME="/home/${MCP_USER}"
-MCP_PROJECT="${MCP_HOME}/obsidian-web-mcp"
-SYNC_PROJECT="${MCP_HOME}/obsidian-sync"
-VAULT_DIR="${MCP_HOME}/Vaults/a self-hosted homelab (Sync)"
-MCP_ENV_DIR="${MCP_HOME}/.config/obsidian-mcp"
-SYNC_ENV_DIR="${MCP_HOME}/.config/obsidian-sync"
+USER="bobsidian"
+HOME_DIR="/home/${USER}"
+MCP_DIR="${HOME_DIR}/obsidian-mcp"
+SYNC_DIR="${HOME_DIR}/obsidian-sync"
+VAULT_DIR="${HOME_DIR}/obsidian-vault"
+MCP_ENV_DIR="${HOME_DIR}/.config/obsidian-mcp"
+SYNC_ENV_DIR="${HOME_DIR}/.config/obsidian-sync"
 
 info()    { echo "[INFO]  $*"; }
 ok()      { echo "[OK]    $*"; }
@@ -28,7 +28,7 @@ require_root() {
 }
 
 require_root
-info "Starting Obsidian LXC setup"
+info "Starting Bobsidian setup"
 
 # --- System packages ---
 apt-get update -qq
@@ -41,33 +41,33 @@ done
 ok "System packages ready"
 
 # --- uv ---
-UV_BIN="${MCP_HOME}/.local/bin/uv"
+UV_BIN="${HOME_DIR}/.local/bin/uv"
 if [[ ! -x "$UV_BIN" ]]; then
     info "Installing uv..."
-    sudo -u "$MCP_USER" bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+    sudo -u "$USER" bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
 fi
-ok "uv: $(sudo -u "$MCP_USER" "$UV_BIN" --version)"
+ok "uv: $(sudo -u "$USER" "$UV_BIN" --version)"
 
 # --- Clone/update repos ---
 for repo_url in \
-    "https://github.com/${MCP_REPO}.git:${MCP_PROJECT}" \
-    "https://github.com/${PROJECT_REPO}.git:${SYNC_PROJECT}"; do
-    url="${repo_url%%:*}"
-    dir="${repo_url#*:}"
+    "https://github.com/${MCP_REPO}.git|${MCP_DIR}" \
+    "https://github.com/${PROJECT_REPO}.git|${SYNC_DIR}"; do
+    url="${repo_url%%|*}"
+    dir="${repo_url#*|}"
     if [[ ! -d "$dir/.git" ]]; then
         info "Cloning $url..."
-        sudo -u "$MCP_USER" git clone "$url" "$dir"
+        sudo -u "$USER" git clone "$url" "$dir"
     else
         info "Updating $dir..."
-        sudo -u "$MCP_USER" git -C "$dir" pull --ff-only
+        sudo -u "$USER" git -C "$dir" pull --ff-only
     fi
 done
 ok "Repos ready"
 
 # --- Git identity for vault ---
 if [[ -d "${VAULT_DIR}/.git" ]]; then
-    sudo -u "$MCP_USER" git -C "$VAULT_DIR" config user.name "Bobsidian"
-    sudo -u "$MCP_USER" git -C "$VAULT_DIR" config user.email "${GIT_AUTHOR_EMAIL}"
+    sudo -u "$USER" git -C "$VAULT_DIR" config user.name "bobsidian"
+    sudo -u "$USER" git -C "$VAULT_DIR" config user.email "${GIT_AUTHOR_EMAIL}"
     ok "Vault git identity set"
 else
     warn "Vault is not a git repo — set git identity manually after init"
@@ -75,15 +75,15 @@ fi
 
 # --- Env files ---
 for env_pair in \
-    "${MCP_ENV_DIR}:${SYNC_PROJECT}/env/obsidian-mcp.env.example" \
-    "${SYNC_ENV_DIR}:${SYNC_PROJECT}/env/obsidian-sync.env.example"; do
+    "${MCP_ENV_DIR}:${SYNC_DIR}/env/obsidian-mcp.env.example" \
+    "${SYNC_ENV_DIR}:${SYNC_DIR}/env/obsidian-sync.env.example"; do
     env_dir="${env_pair%%:*}"
     template="${env_pair#*:}"
     env_file="${env_dir}/env"
-    sudo -u "$MCP_USER" mkdir -p "$env_dir"
+    sudo -u "$USER" mkdir -p "$env_dir"
     chmod 700 "$env_dir"
     if [[ ! -f "$env_file" ]]; then
-        sudo -u "$MCP_USER" cp "$template" "$env_file"
+        sudo -u "$USER" cp "$template" "$env_file"
         chmod 600 "$env_file"
         warn "Created $env_file from template — edit and fill in secrets"
     else
@@ -92,26 +92,23 @@ for env_pair in \
 done
 
 # --- Systemd units ---
-cp "${SYNC_PROJECT}/systemd/obsidian-headless-sync.service" /etc/systemd/system/
-mkdir -p /etc/systemd/system/obsidian-headless-sync.service.d
-cp "${SYNC_PROJECT}/systemd/obsidian-headless-sync.service.d/override.conf" \
-    /etc/systemd/system/obsidian-headless-sync.service.d/
-cp "${SYNC_PROJECT}/systemd/obsidian-git-sync.service" /etc/systemd/system/
-cp "${SYNC_PROJECT}/systemd/obsidian-git-sync.timer" /etc/systemd/system/
-cp "${SYNC_PROJECT}/systemd/obsidian-mcp.service" /etc/systemd/system/
+cp "${SYNC_DIR}/systemd/obsidian-sync.service" /etc/systemd/system/
+cp "${SYNC_DIR}/systemd/obsidian-git.service" /etc/systemd/system/
+cp "${SYNC_DIR}/systemd/obsidian-git.timer" /etc/systemd/system/
+cp "${SYNC_DIR}/systemd/obsidian-mcp.service" /etc/systemd/system/
 systemctl daemon-reload
 ok "Systemd units installed"
 
-for svc in obsidian-headless-sync obsidian-mcp; do
+for svc in obsidian-sync obsidian-mcp; do
     systemctl enable "$svc"
 done
-systemctl enable obsidian-git-sync.timer
+systemctl enable obsidian-git.timer
 ok "Services enabled"
 
 # --- Cron: headless heartbeat ---
-CRON_LINE="* * * * * ${SYNC_PROJECT}/scripts/obsidian-headless-heartbeat.sh"
-if ! sudo -u "$MCP_USER" crontab -l 2>/dev/null | grep -qF "obsidian-headless-heartbeat"; then
-    (sudo -u "$MCP_USER" crontab -l 2>/dev/null; echo "$CRON_LINE") | sudo -u "$MCP_USER" crontab -
+CRON_LINE="* * * * * ${SYNC_DIR}/scripts/heartbeat.sh"
+if ! sudo -u "$USER" crontab -l 2>/dev/null | grep -qF "scripts/heartbeat.sh"; then
+    (sudo -u "$USER" crontab -l 2>/dev/null; echo "$CRON_LINE") | sudo -u "$USER" crontab -
     ok "Cron job installed for headless heartbeat"
 else
     ok "Headless heartbeat cron already exists"
@@ -119,8 +116,13 @@ fi
 
 # --- Pre-warm MCP venv ---
 info "Syncing MCP Python deps..."
-sudo -u "$MCP_USER" bash -c "cd '${MCP_PROJECT}' && '${UV_BIN}' sync"
+sudo -u "$USER" bash -c "cd '${MCP_DIR}' && '${UV_BIN}' sync"
 ok "Python deps ready"
+
+# --- Pre-warm frontmatter stamper (PEP 723 inline deps) ---
+info "Pre-warming frontmatter stamper..."
+sudo -u "$USER" "${UV_BIN}" run --script "${SYNC_DIR}/scripts/stamp-frontmatter.py" >/dev/null 2>&1 || true
+ok "Frontmatter stamper ready"
 
 echo ""
 echo "========================================================"
@@ -129,8 +131,8 @@ echo ""
 echo "  Next steps:"
 echo "    1. Edit ${MCP_ENV_DIR}/env (TOKEN, CLIENT_SECRET, ALLOWED_HOSTS)"
 echo "    2. Edit ${SYNC_ENV_DIR}/env (heartbeat URLs)"
-echo "    3. systemctl start obsidian-headless-sync"
-echo "    4. systemctl start obsidian-git-sync.timer"
+echo "    3. systemctl start obsidian-sync"
+echo "    4. systemctl start obsidian-git.timer"
 echo "    5. systemctl start obsidian-mcp"
 echo "    6. journalctl -u obsidian-mcp -f"
 echo "========================================================"

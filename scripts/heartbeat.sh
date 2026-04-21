@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# obsidian-headless-heartbeat.sh — Ping Uptime Kuma if Headless Sync is active
+# heartbeat.sh — Ping Uptime Kuma if Headless Sync is active
 #
 # Runs via cron every minute. Only pings if the sync log was modified
 # in the last 5 minutes. If ob dies or disconnects, the log goes stale,
 # heartbeat stops, Uptime Kuma alerts.
 #
-# Crontab entry (obsidian user):
-#   * * * * * /home/obsidian/obsidian-sync/scripts/obsidian-headless-heartbeat.sh
+# Crontab entry (bobsidian user):
+#   * * * * * /home/bobsidian/obsidian-sync/scripts/heartbeat.sh
 
 set -euo pipefail
 
-ENV_FILE="/home/obsidian/.config/obsidian-sync/env"
+ENV_FILE="/home/bobsidian/.config/obsidian-sync/env"
 # shellcheck source=/dev/null
 [ -f "$ENV_FILE" ] && . "$ENV_FILE"
 
-HEARTBEAT_URL="${OBSIDIAN_HEADLESS_HEARTBEAT_URL:-}"
-LOG_DIR="/home/obsidian/.config/obsidian-headless/sync"
+HEARTBEAT_URL="${OBSIDIAN_SYNC_HEARTBEAT_URL:-}"
+LOG_DIR="/home/bobsidian/.config/obsidian-sync/sync"
 
 if [ -z "$HEARTBEAT_URL" ]; then
     exit 0

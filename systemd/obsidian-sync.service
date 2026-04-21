@@ -4,10 +4,10 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=obsidian
-ExecStart=/usr/bin/ob sync --path "/home/obsidian/Vaults/a self-hosted homelab (Sync)" --continuous
-Restart=on-failure
-RestartSec=10
+User=bobsidian
+ExecStart=/usr/bin/ob sync --path "/home/bobsidian/obsidian-vault" --continuous
+Restart=always
+RestartSec=30
 
 [Install]
 WantedBy=multi-user.target

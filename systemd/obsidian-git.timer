@@ -1,5 +1,5 @@
 [Unit]
-Description=Vault Git Sync Timer
+Description=Obsidian Git Sync Timer
 
 [Timer]
 OnCalendar=*:0/5
