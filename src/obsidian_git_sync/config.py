@@ -25,7 +25,6 @@ import os
 VAULT_GITSYNC_ENABLED = os.environ.get("VAULT_GITSYNC_ENABLED", "")
 
 _TRUTHY = {"1", "true", "yes", "on"}
-_FALSEY = {"", "0", "false", "no", "off"}
 
 
 def is_enabled() -> bool:

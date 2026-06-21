@@ -37,7 +37,7 @@ class GitSyncExtension(extensions.Extension):
         is off, so an operator can see it is present yet inert.
         """
         if not self._enabled:
-            logger.info("git-sync extension loaded but DISABLED (VAULT_GITSYNC_ENABLED not set)")
+            logger.info("git-sync extension loaded but DISABLED (VAULT_GITSYNC_ENABLED not truthy)")
             return
 
         config.validate_gitsync()
