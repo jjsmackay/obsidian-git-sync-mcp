@@ -69,6 +69,15 @@ VAULT_GITSYNC_PUSH_MAX_INTERVAL = os.environ.get("VAULT_GITSYNC_PUSH_MAX_INTERVA
 VAULT_GITSYNC_GIT_AUTHOR_NAME = os.environ.get("VAULT_GITSYNC_GIT_AUTHOR_NAME", "")
 VAULT_GITSYNC_GIT_AUTHOR_EMAIL = os.environ.get("VAULT_GITSYNC_GIT_AUTHOR_EMAIL", "")
 
+# Optional push heartbeat. When set, the worker GETs this URL after each
+# successful push so a push-style monitor sees git sync reached the remote.
+# EMPTY = disabled (the default). Kept raw and parsed/validated in
+# validate_gitsync() so a malformed URL fails closed at startup. The value may be
+# a capability URL (secret in the path), so it is never echoed in errors/logs.
+#
+#   VAULT_GITSYNC_HEARTBEAT_URL -- an http(s) URL with a host, or "" to disable.
+VAULT_GITSYNC_HEARTBEAT_URL = os.environ.get("VAULT_GITSYNC_HEARTBEAT_URL", "")
+
 # Frontmatter stamping toggle. Unlike the extension's master switch this defaults
 # ENABLED ("" => on): stamping is the project's reason for existing, so the safe
 # default is to stamp. Operators who do not use timestamp frontmatter set this to
@@ -167,6 +176,15 @@ def author_email() -> str | None:
     return VAULT_GITSYNC_GIT_AUTHOR_EMAIL.strip() or None
 
 
+def heartbeat_url() -> str:
+    """Return the configured push-heartbeat URL, or "" when disabled.
+
+    Stripped so trailing whitespace from an env file is not mistaken for a URL.
+    Call only after ``validate_gitsync()`` has accepted it.
+    """
+    return VAULT_GITSYNC_HEARTBEAT_URL.strip()
+
+
 def validate_gitsync() -> None:
     """Validate git-sync configuration at startup; raise ``ValueError`` if invalid.
 
@@ -245,3 +263,22 @@ def validate_gitsync() -> None:
                 f"git-sync is enabled but VAULT_GITSYNC_REMOTE '{remote_name}' "
                 f"does not exist in the vault at VAULT_PATH"
             )
+
+    # Optional push heartbeat. Empty = disabled (valid). When set, it must be an
+    # http(s) URL with a host, mirroring upstream validate_heartbeat (incl. the
+    # port-parse so a malformed port fails closed). The URL is a capability URL
+    # (secret in the path), so the messages name only the var, never the value.
+    hb_url = heartbeat_url()
+    if hb_url:
+        from urllib.parse import urlsplit
+
+        try:
+            parsed = urlsplit(hb_url)
+            port = parsed.port  # raises ValueError on a malformed port
+        except ValueError:
+            raise ValueError("VAULT_GITSYNC_HEARTBEAT_URL has a malformed port")
+        if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
+            raise ValueError(
+                "VAULT_GITSYNC_HEARTBEAT_URL must be an http(s) URL with a host"
+            )
+        del port  # only accessed to trigger the malformed-port check

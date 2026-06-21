@@ -31,7 +31,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from . import config, stamping
+from . import config, heartbeat, stamping
 from .events import MCP_WRITE, SYNC_SWEEP, EventQueue
 from .git_ops import GitOps
 
@@ -83,6 +83,7 @@ class GitWorker:
         branch: str = "",
         push_debounce: float = 10.0,
         push_max_interval: float = 300.0,
+        heartbeat_url: str = "",
     ) -> None:
         self.events = events
         self.git = git
@@ -92,6 +93,8 @@ class GitWorker:
         self._branch = branch
         self._push_debounce = push_debounce
         self._push_max_interval = push_max_interval
+        # heartbeat_url == "" -> no push heartbeat (the default).
+        self._heartbeat_url = heartbeat_url
 
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -125,6 +128,7 @@ class GitWorker:
             branch=config.branch(),
             push_debounce=config.push_debounce(),
             push_max_interval=config.push_max_interval(),
+            heartbeat_url=config.heartbeat_url(),
         )
 
     # --- Thread lifecycle --------------------------------------------------
@@ -270,6 +274,12 @@ class GitWorker:
         if push.ok:
             self._unpushed = False
             self._last_push = self._now()
+            # Fire the push heartbeat only after a confirmed push (never on
+            # failure, and commit-only mode never reaches here) and only when a
+            # URL is configured. ping() is itself fail-soft, and the whole push
+            # cycle is already exception-wrapped in _maybe_push.
+            if self._heartbeat_url:
+                heartbeat.ping(self._heartbeat_url)
         else:
             # Logged + swallowed; commits stay unpushed and retry next cycle.
             logger.warning("git-worker push failed (rc=%s)", push.rc)

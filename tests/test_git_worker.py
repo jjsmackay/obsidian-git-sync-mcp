@@ -484,3 +484,133 @@ def test_validate_accepts_default_push_timing(gitsync_enabled, git_vault_dir):
     config.validate_gitsync()
     assert config.push_debounce() == 10.0
     assert config.push_max_interval() == 300.0
+
+
+# --- Push heartbeat (spec: monitoring) -----------------------------------------
+
+_HEARTBEAT_URL = "https://monitor.example/ping/abc123"
+
+
+def test_successful_push_fires_one_heartbeat(git_remote_vault, monkeypatch):
+    """A successful push to the bare remote fires exactly one ping with the URL."""
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("x")
+
+    pings = []
+    monkeypatch.setattr(
+        "obsidian_git_sync.worker.heartbeat.ping", lambda url: pings.append(url)
+    )
+
+    w = _worker(
+        EventQueue(), vault, remote="origin", branch="main",
+        heartbeat_url=_HEARTBEAT_URL,
+    )
+    w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
+    w._maybe_push()
+
+    assert w._unpushed is False
+    assert pings == [_HEARTBEAT_URL]
+
+
+def test_failed_push_fires_no_heartbeat(git_remote_vault, tmp_path, monkeypatch):
+    """A failed push (bad remote URL) fires no ping."""
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("x")
+
+    pings = []
+    monkeypatch.setattr(
+        "obsidian_git_sync.worker.heartbeat.ping", lambda url: pings.append(url)
+    )
+
+    w = _worker(
+        EventQueue(), vault, remote="origin", branch="main",
+        heartbeat_url=_HEARTBEAT_URL,
+    )
+    w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
+    _git(vault, "remote", "set-url", "origin", str(tmp_path / "does-not-exist.git"))
+    w._maybe_push()  # must not raise
+
+    assert w._unpushed is True
+    assert pings == []
+
+
+def test_commit_only_mode_fires_no_heartbeat(git_remote_vault, monkeypatch):
+    """Commit-only mode (no remote) never reaches a push, so it never pings."""
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("x")
+
+    pings = []
+    monkeypatch.setattr(
+        "obsidian_git_sync.worker.heartbeat.ping", lambda url: pings.append(url)
+    )
+
+    w = _worker(EventQueue(), vault, remote="", branch="main", heartbeat_url=_HEARTBEAT_URL)
+    w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
+    w._maybe_push()
+
+    assert pings == []
+
+
+def test_no_heartbeat_url_never_pings(git_remote_vault, monkeypatch):
+    """No URL configured -> no ping even on a successful push."""
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("x")
+
+    pings = []
+    monkeypatch.setattr(
+        "obsidian_git_sync.worker.heartbeat.ping", lambda url: pings.append(url)
+    )
+
+    w = _worker(EventQueue(), vault, remote="origin", branch="main")  # no heartbeat_url
+    w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
+    w._maybe_push()
+
+    assert w._unpushed is False
+    assert pings == []
+
+
+def test_from_config_passes_heartbeat_url(gitsync_enabled, git_remote_vault, monkeypatch):
+    """from_config wires config.heartbeat_url() into the worker."""
+    monkeypatch.setattr(config, "VAULT_GITSYNC_REMOTE", "origin")
+    monkeypatch.setattr(config, "VAULT_GITSYNC_HEARTBEAT_URL", _HEARTBEAT_URL)
+
+    import obsidian_vault_mcp.config as upstream_config
+
+    w = GitWorker.from_config(EventQueue(), upstream_config.VAULT_PATH)
+    assert w._heartbeat_url == _HEARTBEAT_URL
+
+
+# --- Heartbeat config validation (spec: validated fail-closed) -----------------
+
+@pytest.mark.parametrize("bad", ["ftp://x", "not-a-url", "http://", "https://:8080/x"])
+def test_validate_rejects_bad_heartbeat_url(gitsync_enabled, git_vault_dir, monkeypatch, bad):
+    monkeypatch.setattr(config, "VAULT_GITSYNC_HEARTBEAT_URL", bad)
+    with pytest.raises(ValueError, match="VAULT_GITSYNC_HEARTBEAT_URL"):
+        config.validate_gitsync()
+
+
+def test_validate_rejects_malformed_port_heartbeat_url(gitsync_enabled, git_vault_dir, monkeypatch):
+    monkeypatch.setattr(config, "VAULT_GITSYNC_HEARTBEAT_URL", "http://host:notaport/x")
+    with pytest.raises(ValueError, match="VAULT_GITSYNC_HEARTBEAT_URL"):
+        config.validate_gitsync()
+
+
+def test_validate_accepts_valid_heartbeat_url(gitsync_enabled, git_vault_dir, monkeypatch):
+    monkeypatch.setattr(config, "VAULT_GITSYNC_HEARTBEAT_URL", _HEARTBEAT_URL)
+    config.validate_gitsync()  # must not raise
+
+
+def test_validate_empty_heartbeat_url_is_valid(gitsync_enabled, git_vault_dir):
+    """Empty heartbeat URL disables the feature and always validates."""
+    config.validate_gitsync()  # default "" -- must not raise
+    assert config.heartbeat_url() == ""
+
+
+def test_validate_error_does_not_echo_url(gitsync_enabled, git_vault_dir, monkeypatch):
+    """The validation error names the var but never echoes the (possibly secret) URL."""
+    secret = "ftp://secret-host/super-secret-token"
+    monkeypatch.setattr(config, "VAULT_GITSYNC_HEARTBEAT_URL", secret)
+    with pytest.raises(ValueError) as exc:
+        config.validate_gitsync()
+    assert "super-secret-token" not in str(exc.value)
+    assert "secret-host" not in str(exc.value)
