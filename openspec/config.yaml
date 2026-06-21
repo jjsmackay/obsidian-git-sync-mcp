@@ -1,20 +1,145 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Project: obsidian-git-sync-mcp — a dockerised, self-hostable host that runs an
+  Obsidian vault headlessly and serves it to MCP clients, with pluggable sync.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Design thesis (the whole point): most Obsidian MCP servers require the Obsidian
+  desktop app plus the Local REST API plugin running on a machine someone is
+  logged into. This project writes the vault filesystem directly (via the
+  upstream MCP server) so the whole thing is headless and containerisable, and it
+  treats sync as a pluggable concern. git is the first sync backend: the vault
+  stays available to AI assistants over MCP, git mirrors history as a backup and
+  audit trail, and Obsidian Sync (optional) keeps human devices in step. It
+  evolved from a single-host "bobsidian" LXC (shell scripts + flock + cron),
+  generalised and containerised.
+
+  Tech stack:
+    Python 3.12+ orchestration driving the `git` CLI (no libgit2/pygit2).
+    Upstream MCP server: jimprosser/obsidian-web-mcp (consumed as a base image
+      and a Python dependency; changes are contributed upstream, not forked).
+    uv + hatchling (build/deps; no setuptools, no requirements.txt, no Node).
+    Docker + Docker Compose (2-container topology, see below).
+    `ob` = obsidian-headless (official obsidianmd package, bundled with no
+      separate licence) for the optional Obsidian Sync sidecar.
+    pytest for unit tests.
+
+  Locked architecture (decided in the design session):
+    Extension seam (upstream #57, merged at b1da366): git-sync is an in-process
+      `extensions.Extension` loaded via `serve(extensions=[...])`. The base class
+      offers `register_tools` / `register_routes` and a post-start hook.
+      `FrontmatterIndex.add_change_listener(cb)` fires `cb(abs_path, exists)`,
+      debounced, .md-only.
+    Write listener (upstream issue #58; implemented on the `feat/write-listener`
+      branch and submitted as upstream PR #62, pending merge):
+      `register_write_listener(cb)` → `cb(operation, paths)`, gives provenance so
+      commits can be split into `mcp:` (a write came through MCP) vs `sync:`
+      (a sweep picked up an out-of-band change). Composed with
+      `add_change_listener` plus a periodic timer sweep. The timer is required,
+      not just a backstop: the change listener is .md-only, so attachments and
+      canvas files are only ever caught by the sweep.
+    Single git-worker thread replaces flock. Producers (write-listener →
+      `mcp:` commits; timer / `add_change_listener` → `sync:` sweep) enqueue onto
+      an in-memory queue; ONE consumer thread performs all git work:
+      stamp → `git add` → commit (`mcp: <op> <paths>` | `sync: <ts>`) →
+      debounced `fetch` / `rebase -X theirs` / `push` → heartbeat.
+      Serialisation is structural (one thread) — no IPC, no queue file, no flock.
+    Commit/push decoupled, with configurable cadence and a debounce window.
+      Per-write commits keep granularity; push is batched.
+    Invariants preserved from the bobsidian git-sync script: local-wins rebase
+      (`rebase -X theirs`), and never commit conflict markers.
+    Frontmatter stamping: the on-disk format contract is an unquoted UTC
+      timestamp `YYYY-MM-DDTHH:mm:ssZ`. Stamp only files whose mtime is newer
+      than their frontmatter `modified` value — device edits arrive
+      already-stamped (skipped); MCP writes get stamped.
+
+  Topology = 2 containers:
+    `mcp` — upstream server + git-sync extension, always on. Publishes only the
+      MCP port; reverse-proxy / Cloudflare Tunnel / Tailscale is documented, not
+      baked in.
+    `obsidian-sync` — the `ob` headless CLI, optional (Compose profile
+      `obsidian`). Credentials bootstrapped once into a persisted volume
+      (`docker compose run … ob login` + `ob sync-setup`). There is no separate
+      git-sync container.
+    Image: FROM the upstream image + `pip install` the extension, with the CMD
+      launching `serve([GitSyncExtension()])`.
+
+  Quality bar (the upstream "house pattern", from #45): env-gated config
+    (`VAULT_GITSYNC_*`), a `validate_gitsync()` that fails CLOSED at startup,
+    worker failures logged and swallowed (never crash the MCP server),
+    unit-tested. Monitoring is a generic push-URL heartbeat (Uptime Kuma /
+    Healthchecks / any) plus a container HEALTHCHECK; an optional `/health`
+    route via `register_routes`. All monitoring is optional.
+
+  Out of scope for v1 (deferred to v2):
+    Full "who" attribution — an authenticated principal on the MCP side plus
+      `user@device` from `ob`'s `state.db` on the sync side. v1 ships only the
+      coarse `mcp:` vs `sync:` split (via #58); no principal, no `state.db`
+      reads.
+    Additional sync backends (Syncthing, rsync). The seam is left open; only git
+      is implemented.
+    Reverse-engineering Obsidian Sync's version-history API — rejected as
+      fragile and ToS-grey. If attribution is built later it reads the local
+      `state.db`; otherwise the in-app Version History UI is the out-of-band
+      source.
+
+  v1 change decomposition (8 changes, linear):
+    1. scaffold-extension — `GitSyncExtension(Extension)` loads via
+       `serve(extensions=[...])`; env-gated; `validate_gitsync()` fails closed;
+       optional `/health` route; bootable no-op. Folds in pyproject/uv setup.
+    2. change-trigger — wire `add_change_listener` + `register_write_listener`
+       (#58) so detected changes enqueue onto the worker queue.
+    3. git-worker — the single consumer thread: stamp → add → commit
+       (`mcp:` / `sync:`) → debounced `rebase -X theirs` / push; commit/push
+       decoupling; configurable cadence.
+    4. frontmatter-stamping — port the stamp logic + the
+       mtime-vs-`modified` rule. May fold into change 3.
+    5. container-deployment — Dockerfile (FROM upstream + extension) +
+       docker-compose.yml (mcp service, profile-gated obsidian-sync) +
+       .env.example + HEALTHCHECK.
+    6. obsidian-sync-sidecar — the `ob` container (persisted config volume,
+       interactive bootstrap, docs). Biggest standalone risk: validating that
+       `ob` runs headless in a slim container — do this early. Prior art:
+       crosbyh/obsidian-headless-sync-docker.
+    7. monitoring — push heartbeat + container healthchecks.
+    8. docs — expand README, bootstrap, exposure options.
+
+    (A history-sanitisation workstream — importing the bobsidian origin history
+    with host-specific details removed — is already complete and lives on the
+    `legacy/bobsidian` branch; it is not an OpenSpec change.)
+
+rules:
+  proposal:
+    - "Reference the upstream seam by issue/PR number and symbol when a change
+      depends on it: #57 extension seam, #58 write listener, #45 heartbeat
+      pattern, #44 fire_post_write."
+    - v1 ships only the coarse `mcp:` vs `sync:` commit split. Do not propose
+      principal-level or `user@device` attribution — that is deferred to v2.
+    - git is the only sync backend implemented in v1. The pluggable-sync seam
+      may be kept open in design, but do not propose Syncthing/rsync backends.
+    - Keep host names and any private commercial detail out of proposals and
+      specs; this is a public, open-source-quality repo.
+
+  design:
+    - All git work happens on ONE worker thread. Never reintroduce flock, a
+      queue file, or a second process to serialise git. Producers enqueue;
+      the single consumer does all stamp/add/commit/push.
+    - "Preserve the local-wins invariant: fetch then `rebase -X theirs`, and
+      never commit conflict markers."
+    - Worker and validation failures are logged and swallowed so the MCP server
+      never crashes; `validate_gitsync()` is the one place that fails closed,
+      at startup.
+    - Stamp a file only when its mtime is newer than its frontmatter `modified`
+      value; the on-disk format is unquoted UTC `YYYY-MM-DDTHH:mm:ssZ`.
+    - "The timer sweep is load-bearing, not a backstop: `add_change_listener`
+      is .md-only, so attachments and canvas files rely on the sweep."
+
+  tasks:
+    - Use uv and hatchling. No setuptools, no requirements.txt, no Node tooling.
+    - Gate every git-sync behaviour behind `VAULT_GITSYNC_*` env vars and prove
+      the disabled path stays a bootable no-op in tests.
+    - Unit-test the worker with a throwaway local git repo (a tmp `git init`
+      and a bare remote); never push to a real remote in tests.
+    - Env-var token names are provisional — when adding config, align the real
+      `.env.example` names with the names used elsewhere in the repo (or update
+      both together).
