@@ -71,9 +71,12 @@ def test_enabled_valid_config_passes(gitsync_enabled, git_vault_dir):
 
 def test_enabled_valid_extension_loads(gitsync_enabled, git_vault_dir):
     """Enabled + valid: the extension's startup hook runs without raising."""
+    from obsidian_vault_mcp.frontmatter_index import FrontmatterIndex
+
     ext = GitSyncExtension()
     assert ext._enabled is True
-    ext.before_indexes_start(object())  # runs validate_gitsync() backstop, no raise
+    # Enabled now attaches a change-listener, so pass a real index, not object().
+    ext.before_indexes_start(FrontmatterIndex())  # runs validate_gitsync() backstop, no raise
 
 
 # --- Enabled + invalid config: fail closed -------------------------------------

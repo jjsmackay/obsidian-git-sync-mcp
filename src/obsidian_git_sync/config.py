@@ -24,6 +24,14 @@ import os
 #   VAULT_GITSYNC_ENABLED -- "true"/"1"/"yes"/"on" enables; anything else disables.
 VAULT_GITSYNC_ENABLED = os.environ.get("VAULT_GITSYNC_ENABLED", "")
 
+# Interval (seconds) between periodic sweep events. The sweep is load-bearing, not a
+# backstop: the .md watcher is blind to attachments/canvas, so the timer is the only
+# thing that catches those. Kept as a raw string and parsed in validate_gitsync() /
+# sweep_interval() so a typo fails closed at startup rather than at import.
+#
+#   VAULT_GITSYNC_SWEEP_INTERVAL -- positive integer seconds (default 60).
+VAULT_GITSYNC_SWEEP_INTERVAL = os.environ.get("VAULT_GITSYNC_SWEEP_INTERVAL", "60")
+
 _TRUTHY = {"1", "true", "yes", "on"}
 
 
@@ -35,6 +43,15 @@ def is_enabled() -> bool:
     setting fails to the safe no-op state.
     """
     return VAULT_GITSYNC_ENABLED.strip().lower() in _TRUTHY
+
+
+def sweep_interval() -> int:
+    """Return the periodic-sweep interval in seconds.
+
+    Parses ``VAULT_GITSYNC_SWEEP_INTERVAL`` -- call only after ``validate_gitsync()``
+    has accepted it (validation is where a bad value fails closed).
+    """
+    return int(VAULT_GITSYNC_SWEEP_INTERVAL)
 
 
 def validate_gitsync() -> None:
@@ -71,3 +88,15 @@ def validate_gitsync() -> None:
             f"git-sync is enabled but VAULT_PATH is not a git working tree (no "
             f".git found): {VAULT_PATH}"
         )
+
+    # Parse-and-check the sweep interval here (mirroring upstream validate_heartbeat):
+    # a non-integer or non-positive value must refuse to boot rather than tight-loop
+    # or crash later when the timer first reads it.
+    try:
+        interval = int(VAULT_GITSYNC_SWEEP_INTERVAL)
+    except ValueError:
+        raise ValueError(
+            "VAULT_GITSYNC_SWEEP_INTERVAL must be an integer number of seconds"
+        )
+    if interval <= 0:
+        raise ValueError("VAULT_GITSYNC_SWEEP_INTERVAL must be a positive integer")

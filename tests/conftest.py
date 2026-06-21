@@ -53,3 +53,18 @@ def gitsync_enabled(monkeypatch):
     monkeypatch.setenv("VAULT_GITSYNC_ENABLED", "true")
     import obsidian_git_sync.config as gs_config
     monkeypatch.setattr(gs_config, "VAULT_GITSYNC_ENABLED", "true")
+
+
+@pytest.fixture(autouse=True)
+def reset_write_listeners():
+    """Reset the upstream write-listener module-global between tests.
+
+    ``write_events._write_listeners`` is a process-global list: each enabled
+    extension appends to it, so without a reset registrations leak across tests
+    and one test's listener fires during another's writes.
+    """
+    import obsidian_vault_mcp.write_events as write_events
+    saved = list(write_events._write_listeners)
+    write_events._write_listeners.clear()
+    yield
+    write_events._write_listeners[:] = saved
