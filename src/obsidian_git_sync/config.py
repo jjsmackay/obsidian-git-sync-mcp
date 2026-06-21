@@ -16,6 +16,7 @@ container-deployment change.
 """
 
 import os
+import subprocess
 
 # Single enabling flag for the whole extension. Empty/unset = disabled (the default).
 # Kept as a raw string and parsed in is_enabled() so an unrecognised value fails
@@ -31,6 +32,42 @@ VAULT_GITSYNC_ENABLED = os.environ.get("VAULT_GITSYNC_ENABLED", "")
 #
 #   VAULT_GITSYNC_SWEEP_INTERVAL -- positive integer seconds (default 60).
 VAULT_GITSYNC_SWEEP_INTERVAL = os.environ.get("VAULT_GITSYNC_SWEEP_INTERVAL", "60")
+
+# The git remote to push to. Default "origin"; an EMPTY string selects commit-only
+# mode (a purely local audit trail / backup-to-disk, never a push). Kept raw and
+# parsed in remote() / checked in validate_gitsync() so a missing remote fails
+# closed at startup rather than on the first push.
+#
+#   VAULT_GITSYNC_REMOTE -- remote name, or "" for commit-only (default "origin").
+VAULT_GITSYNC_REMOTE = os.environ.get("VAULT_GITSYNC_REMOTE", "origin")
+
+# The branch to push. EMPTY = use the working tree's current branch (resolved at
+# worker start). Set it explicitly only to pin a branch other than HEAD.
+#
+#   VAULT_GITSYNC_BRANCH -- branch name, or "" to use the current branch (default "").
+VAULT_GITSYNC_BRANCH = os.environ.get("VAULT_GITSYNC_BRANCH", "")
+
+# Push debounce: seconds the event queue must stay quiet before the worker pushes
+# the commits it has accumulated. Decouples granular per-event commits from
+# batched pushes. Kept raw, parsed in push_debounce() / checked in validate.
+#
+#   VAULT_GITSYNC_PUSH_DEBOUNCE -- positive number of seconds (default 10).
+VAULT_GITSYNC_PUSH_DEBOUNCE = os.environ.get("VAULT_GITSYNC_PUSH_DEBOUNCE", "10")
+
+# Push max interval: an upper bound (seconds) on time-since-last-push so a queue
+# that never goes quiet under sustained load still pushes periodically.
+#
+#   VAULT_GITSYNC_PUSH_MAX_INTERVAL -- positive number of seconds (default 300).
+VAULT_GITSYNC_PUSH_MAX_INTERVAL = os.environ.get("VAULT_GITSYNC_PUSH_MAX_INTERVAL", "300")
+
+# Optional commit author identity. When set, the worker commits with this name/
+# email via ``git -c user.name=… -c user.email=…`` so commits carry a stable
+# author without depending on the host's global git config. Empty = let git use
+# whatever identity the host configures.
+#
+#   VAULT_GITSYNC_GIT_AUTHOR_NAME / VAULT_GITSYNC_GIT_AUTHOR_EMAIL -- optional.
+VAULT_GITSYNC_GIT_AUTHOR_NAME = os.environ.get("VAULT_GITSYNC_GIT_AUTHOR_NAME", "")
+VAULT_GITSYNC_GIT_AUTHOR_EMAIL = os.environ.get("VAULT_GITSYNC_GIT_AUTHOR_EMAIL", "")
 
 _TRUTHY = {"1", "true", "yes", "on"}
 
@@ -52,6 +89,46 @@ def sweep_interval() -> int:
     has accepted it (validation is where a bad value fails closed).
     """
     return int(VAULT_GITSYNC_SWEEP_INTERVAL)
+
+
+def remote() -> str:
+    """Return the configured remote name, or "" for commit-only mode.
+
+    Stripped so trailing whitespace from an env file is not mistaken for a remote.
+    """
+    return VAULT_GITSYNC_REMOTE.strip()
+
+
+def branch() -> str:
+    """Return the configured branch, or "" to mean "use the current branch"."""
+    return VAULT_GITSYNC_BRANCH.strip()
+
+
+def push_debounce() -> float:
+    """Return the push-debounce window in seconds.
+
+    Parses ``VAULT_GITSYNC_PUSH_DEBOUNCE`` -- call only after ``validate_gitsync()``
+    has accepted it.
+    """
+    return float(VAULT_GITSYNC_PUSH_DEBOUNCE)
+
+
+def push_max_interval() -> float:
+    """Return the maximum interval (seconds) between pushes under load.
+
+    Parses ``VAULT_GITSYNC_PUSH_MAX_INTERVAL`` -- call only after validation.
+    """
+    return float(VAULT_GITSYNC_PUSH_MAX_INTERVAL)
+
+
+def author_name() -> str | None:
+    """The configured commit author name, or None when unset."""
+    return VAULT_GITSYNC_GIT_AUTHOR_NAME.strip() or None
+
+
+def author_email() -> str | None:
+    """The configured commit author email, or None when unset."""
+    return VAULT_GITSYNC_GIT_AUTHOR_EMAIL.strip() or None
 
 
 def validate_gitsync() -> None:
@@ -100,3 +177,35 @@ def validate_gitsync() -> None:
         )
     if interval <= 0:
         raise ValueError("VAULT_GITSYNC_SWEEP_INTERVAL must be a positive integer")
+
+    # Push timing: both must be positive numbers. A non-positive debounce would
+    # tight-loop the worker; a non-positive max-interval would force a push every
+    # cycle. Parse-and-check here so either fails closed at startup.
+    for name, raw in (
+        ("VAULT_GITSYNC_PUSH_DEBOUNCE", VAULT_GITSYNC_PUSH_DEBOUNCE),
+        ("VAULT_GITSYNC_PUSH_MAX_INTERVAL", VAULT_GITSYNC_PUSH_MAX_INTERVAL),
+    ):
+        try:
+            value = float(raw)
+        except ValueError:
+            raise ValueError(f"{name} must be a number of seconds")
+        if value <= 0:
+            raise ValueError(f"{name} must be a positive number of seconds")
+
+    # When a remote is configured (the default), it must actually exist in the
+    # working tree -- a misconfigured remote that fails only on the first push is
+    # a worse failure mode than refusing to boot. Commit-only mode (REMOTE="")
+    # skips this check. Checked via ``git remote get-url``; never echo the URL.
+    remote_name = remote()
+    if remote_name:
+        result = subprocess.run(
+            ["git", "-C", str(VAULT_PATH), "remote", "get-url", remote_name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise ValueError(
+                f"git-sync is enabled but VAULT_GITSYNC_REMOTE '{remote_name}' "
+                f"does not exist in the vault at VAULT_PATH"
+            )

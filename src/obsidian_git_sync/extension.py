@@ -20,6 +20,7 @@ from obsidian_vault_mcp import extensions
 
 from . import config
 from .events import EventQueue, SyncEvent
+from .worker import GitWorker
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,9 @@ class GitSyncExtension(extensions.Extension):
         # Stop flag + handle for the daemon sweep timer (created in after_indexes_start).
         self._timer_stop = threading.Event()
         self._timer_thread: threading.Thread | None = None
+        # The single consumer thread that drains self.events and does all git work
+        # (created in after_indexes_start when enabled).
+        self._worker: GitWorker | None = None
 
     def before_indexes_start(self, frontmatter_index) -> None:
         """Validate config (fail-closed backstop), then attach the two listeners.
@@ -78,14 +82,23 @@ class GitSyncExtension(extensions.Extension):
         logger.info("git-sync extension ENABLED")
 
     def after_indexes_start(self, frontmatter_index) -> None:
-        """Start the daemon sweep timer (enabled only).
+        """Start the git worker and the daemon sweep timer (enabled only).
 
         The timer is load-bearing: ``add_change_listener`` is .md-only, so the
         periodic full-tree sweep is the only thing that catches attachments and
-        canvas files. Started after the index is built and watching.
+        canvas files. The worker is the single consumer that drains the queue and
+        does all git work. Both start after the index is built and watching.
         """
         if not self._enabled:
             return
+
+        # The worker reads VAULT_PATH (the working tree the upstream server
+        # operates on) the same way validate_gitsync() does; imported lazily so
+        # tests that patch the upstream module see the current value.
+        from obsidian_vault_mcp.config import VAULT_PATH
+
+        self._worker = GitWorker.from_config(self.events, VAULT_PATH)
+        self._worker.start()
 
         interval = config.sweep_interval()
         self._timer_thread = threading.Thread(
@@ -103,13 +116,16 @@ class GitSyncExtension(extensions.Extension):
             self.events.put(SyncEvent.sync_sweep(trigger="timer"))
 
     def shutdown(self) -> None:
-        """Stop the sweep timer so it exits and enqueues nothing further.
+        """Stop the sweep timer, then stop the worker (best-effort final flush).
 
-        Registered via ``atexit`` (LIFO, before ``frontmatter_index.stop()``). Safe
-        to call even if the timer never started (disabled) -- setting the event is a
-        no-op then.
+        Registered via ``atexit`` (LIFO, before ``frontmatter_index.stop()``). Stop
+        the timer FIRST so it enqueues nothing further, then stop the worker so its
+        final flush sees a settled queue. Safe to call even if neither started
+        (disabled) -- setting the event is a no-op and the worker handle is None.
         """
         self._timer_stop.set()
+        if self._worker is not None:
+            self._worker.stop()
 
     # register_tools, register_routes stay no-ops this change. In particular
     # register_routes adds nothing: /health is upstream-reserved and build_app()
