@@ -33,6 +33,33 @@ services:
     # HEALTHCHECK (the TCP port check baked into the Dockerfile), so `docker
     # compose ps` reports health without duplicating the command where it could drift.
 
-  # --- obsidian-sync sidecar goes here (next change) ---------------------------
-  # The optional Obsidian Headless Sync sidecar will be added as a profile-gated
-  # service in the next change. Do not add it now.
+  # --- obsidian-sync sidecar ---------------------------------------------------
+  # Optional Obsidian Headless Sync sidecar. Opt-in via the `obsidian` profile:
+  #   docker compose up -d                      # mcp only
+  #   docker compose --profile obsidian up -d   # mcp + obsidian-sync
+  # Requires a one-time interactive bootstrap (ob login + ob sync-setup) into the
+  # named state volume before it can sync -- see obsidian-sync/README.md.
+  obsidian-sync:
+    profiles: ["obsidian"]
+    build: ./obsidian-sync
+    restart: unless-stopped
+
+    # Long-running continuous sync of the shared vault working tree. The path
+    # must match the vault mount below (VAULT_PATH, default /vault).
+    command: ["ob", "sync", "--path", "${VAULT_PATH:-/vault}", "--continuous"]
+
+    volumes:
+      # SAME vault working tree the mcp service mounts. Device edits synced down
+      # by `ob` land here on disk, where the git-sync worker's sweep commits them.
+      - "${VAULT_HOST_PATH:-./vault}:${VAULT_PATH:-/vault}"
+
+      # `ob`'s config + sync state (credentials, per-vault state.db) on a named
+      # volume so they survive restarts. Path is `ob`'s actual config dir for the
+      # image's HOME=/home/ob: $HOME/.config/obsidian-headless.
+      - "obsidian_sync_state:/home/ob/.config/obsidian-headless"
+
+# Named volumes.
+volumes:
+  # Persists the obsidian-sync sidecar's `ob` config + sync state across
+  # restarts. Populated by the one-time bootstrap (see obsidian-sync/README.md).
+  obsidian_sync_state:
