@@ -137,14 +137,7 @@ def stamp(path: Path) -> bool:
 
 
 def stamp_paths(paths) -> None:
-    """Stamp each path, fail-soft per file (never raises).
-
-    The worker's door into stamping: a single bad file must never stop the commit,
-    so every per-path error is caught and logged here too (belt-and-braces with
-    ``stamp``'s own guard).
-    """
+    """Stamp each path. Fail-soft: ``stamp`` catches and logs its own per-file
+    errors and never raises, so one bad file can't stop the rest (or the commit)."""
     for p in paths:
-        try:
-            stamp(Path(p))
-        except Exception:
-            logger.exception("frontmatter stamping failed for %s", p)
+        stamp(Path(p))
