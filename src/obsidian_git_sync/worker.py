@@ -28,6 +28,7 @@ import logging
 import queue
 import subprocess
 import threading
+import time
 from datetime import datetime, timezone
 
 from . import config
@@ -103,8 +104,6 @@ class GitWorker:
 
     @staticmethod
     def _now() -> float:
-        import time
-
         return time.monotonic()
 
     @classmethod
