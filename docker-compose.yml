@@ -29,18 +29,9 @@ services:
       #      (e.g. https://x-access-token:TOKEN@github.com/org/vault.git), so no key
       #      file is mounted. Keep the token out of git and out of the image.
 
-    # Mirror the Dockerfile HEALTHCHECK so `docker compose ps` reports health: a
-    # dependency-free TCP connect to the MCP port using the image's own python.
-    healthcheck:
-      test:
-        - "CMD"
-        - "python"
-        - "-c"
-        - "import os,socket,sys; s=socket.socket(); s.settimeout(3); sys.exit(0 if s.connect_ex(('127.0.0.1', int(os.environ.get('VAULT_MCP_PORT','8420'))))==0 else 1)"
-      interval: 30s
-      timeout: 5s
-      start_period: 20s
-      retries: 3
+    # No healthcheck block here on purpose: Compose inherits the image's
+    # HEALTHCHECK (the TCP port check baked into the Dockerfile), so `docker
+    # compose ps` reports health without duplicating the command where it could drift.
 
   # --- obsidian-sync sidecar goes here (next change) ---------------------------
   # The optional Obsidian Headless Sync sidecar will be added as a profile-gated
