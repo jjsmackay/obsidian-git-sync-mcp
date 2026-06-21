@@ -319,6 +319,96 @@ def test_handle_event_swallows_exceptions(git_remote_vault, monkeypatch):
     w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
 
 
+# --- Frontmatter stamping in the MCP-write commit (frontmatter-stamping) -------
+
+_MODIFIED_RE = re.compile(r"^modified: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", re.MULTILINE)
+
+
+def test_mcp_write_stamped_within_commit(git_remote_vault, monkeypatch):
+    """Enabled stamping -> the mcp: commit's content carries a bumped, unquoted modified."""
+    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "true")
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("---\ntitle: hi\n---\nbody\n")
+
+    w = _worker(EventQueue(), vault)
+    w._handle_event(SyncEvent.mcp_write("updated", ["a.md"]))
+
+    assert _log_messages(vault)[0] == "mcp: updated a.md"
+    # Read the committed blob back from HEAD (not just the working tree).
+    committed = _git(vault, "show", "HEAD:a.md")
+    assert _MODIFIED_RE.search(committed), committed
+    assert "modified: '" not in committed  # unquoted
+
+
+def test_mcp_write_deleted_not_stamped(git_remote_vault, monkeypatch):
+    """Operation 'deleted' is never stamped (there is no file to stamp)."""
+    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "true")
+    vault, _bare = git_remote_vault
+    # Commit a file, then delete it on disk and fire a deleted MCP_WRITE.
+    (vault / "gone.md").write_text("---\ntitle: hi\n---\nbody\n")
+    w = _worker(EventQueue(), vault)
+    w._handle_event(SyncEvent.mcp_write("created", ["gone.md"]))
+
+    # Spy on the stamper: a deleted op must not call it.
+    called = {"n": 0}
+    monkeypatch.setattr(
+        "obsidian_git_sync.worker.stamping.stamp_paths",
+        lambda paths: called.__setitem__("n", called["n"] + 1),
+    )
+    (vault / "gone.md").unlink()
+    w._handle_event(SyncEvent.mcp_write("deleted", ["gone.md"]))
+
+    assert called["n"] == 0
+    # The delete was still committed.
+    assert _log_messages(vault)[0] == "mcp: deleted gone.md"
+
+
+def test_sweep_does_not_stamp(git_remote_vault, monkeypatch):
+    """A SYNC_SWEEP never invokes stamping (device edits arrive pre-stamped)."""
+    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "true")
+    vault, _bare = git_remote_vault
+    (vault / "note.md").write_text("---\ntitle: hi\n---\nbody\n")
+
+    called = {"n": 0}
+    monkeypatch.setattr(
+        "obsidian_git_sync.worker.stamping.stamp_paths",
+        lambda paths: called.__setitem__("n", called["n"] + 1),
+    )
+    w = _worker(EventQueue(), vault)
+    w._handle_event(SyncEvent.sync_sweep("timer"))
+
+    assert called["n"] == 0
+
+
+def test_stamping_disabled_commits_file_verbatim(git_remote_vault, monkeypatch):
+    """VAULT_GITSYNC_STAMP=false -> committed file byte-identical to what was written."""
+    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "false")
+    vault, _bare = git_remote_vault
+    written = "---\ntitle: hi\n---\nbody\n"
+    (vault / "a.md").write_text(written)
+
+    w = _worker(EventQueue(), vault)
+    w._handle_event(SyncEvent.mcp_write("updated", ["a.md"]))
+
+    committed = _git(vault, "show", "HEAD:a.md")
+    assert committed == written  # no modified added
+
+
+def test_mcp_write_malformed_frontmatter_still_committed(git_remote_vault, monkeypatch):
+    """Malformed frontmatter is logged, not raised; the file is committed unstamped."""
+    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "true")
+    vault, _bare = git_remote_vault
+    written = "---\na: b: c\n---\nbody\n"
+    (vault / "bad.md").write_text(written)
+
+    w = _worker(EventQueue(), vault)
+    w._handle_event(SyncEvent.mcp_write("updated", ["bad.md"]))  # must not raise
+
+    # Committed, and unstamped (the stamp failed fail-soft).
+    assert _log_messages(vault)[0] == "mcp: updated bad.md"
+    assert _git(vault, "show", "HEAD:bad.md") == written
+
+
 # --- Disabled starts no worker (spec: Single git-worker consumer thread) -------
 
 def test_disabled_starts_no_worker(gitsync_disabled, vault_dir):

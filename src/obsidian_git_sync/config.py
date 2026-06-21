@@ -69,7 +69,34 @@ VAULT_GITSYNC_PUSH_MAX_INTERVAL = os.environ.get("VAULT_GITSYNC_PUSH_MAX_INTERVA
 VAULT_GITSYNC_GIT_AUTHOR_NAME = os.environ.get("VAULT_GITSYNC_GIT_AUTHOR_NAME", "")
 VAULT_GITSYNC_GIT_AUTHOR_EMAIL = os.environ.get("VAULT_GITSYNC_GIT_AUTHOR_EMAIL", "")
 
+# Frontmatter stamping toggle. Unlike the extension's master switch this defaults
+# ENABLED ("" => on): stamping is the project's reason for existing, so the safe
+# default is to stamp. Operators who do not use timestamp frontmatter set this to
+# a falsey value and MCP-written files are committed exactly as the client sent
+# them. Kept raw and parsed in stamp_enabled() so an unrecognised value is treated
+# as enabled (the default) rather than crashing at import.
+#
+#   VAULT_GITSYNC_STAMP -- a falsey string ("0"/"false"/"no"/"off") disables;
+#   anything else (including unset) enables.
+VAULT_GITSYNC_STAMP = os.environ.get("VAULT_GITSYNC_STAMP", "")
+
 _TRUTHY = {"1", "true", "yes", "on"}
+_FALSEY = {"0", "false", "no", "off"}
+
+
+def _is_truthy(raw: str, *, default: bool) -> bool:
+    """Parse a raw env string to a bool, falling back to ``default``.
+
+    Recognises the same truthy/falsey vocabularies project-wide. ``default`` is
+    returned for the empty string and any unrecognised value, so each flag can
+    choose whether ambiguity fails on or off.
+    """
+    value = raw.strip().lower()
+    if value in _TRUTHY:
+        return True
+    if value in _FALSEY:
+        return False
+    return default
 
 
 def is_enabled() -> bool:
@@ -79,7 +106,16 @@ def is_enabled() -> bool:
     else (including unrecognised values) is treated as disabled so an unclear
     setting fails to the safe no-op state.
     """
-    return VAULT_GITSYNC_ENABLED.strip().lower() in _TRUTHY
+    return _is_truthy(VAULT_GITSYNC_ENABLED, default=False)
+
+
+def stamp_enabled() -> bool:
+    """Return whether frontmatter stamping is enabled (default True).
+
+    Reuses the same truthy/falsey parsing as ``is_enabled()`` but defaults ON: a
+    falsey ``VAULT_GITSYNC_STAMP`` opts out, an unset or unrecognised value stamps.
+    """
+    return _is_truthy(VAULT_GITSYNC_STAMP, default=True)
 
 
 def sweep_interval() -> int:

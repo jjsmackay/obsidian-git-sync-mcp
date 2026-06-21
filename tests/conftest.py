@@ -96,6 +96,19 @@ def gitsync_enabled(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def stamping_disabled_by_default(monkeypatch):
+    """Disable frontmatter stamping unless a test opts in.
+
+    Stamping defaults ON in production, but most worker tests assert byte-exact
+    file/commit content unrelated to timestamps; leaving stamping on would inject
+    frontmatter into their .md fixtures. Tests that exercise stamping re-enable it
+    by setting ``config.VAULT_GITSYNC_STAMP`` to a truthy value themselves.
+    """
+    import obsidian_git_sync.config as gs_config
+    monkeypatch.setattr(gs_config, "VAULT_GITSYNC_STAMP", "false")
+
+
+@pytest.fixture(autouse=True)
 def reset_write_listeners():
     """Reset the upstream write-listener module-global between tests.
 

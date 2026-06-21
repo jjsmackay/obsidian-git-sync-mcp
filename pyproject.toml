@@ -9,6 +9,11 @@ dependencies = [
     # the later change-trigger change needs lives on feat/write-listener (PR #62).
     # TODO: repin to an upstream/PyPI release once PR #62 merges.
     "obsidian-web-mcp @ git+https://github.com/jjsmackay/obsidian-web-mcp@feat/write-listener",
+    # Formatting-preserving YAML round-trip for frontmatter stamping: preserves
+    # users' quotes, key order, and comments, and (with a quote-strip post-process)
+    # emits the Obsidian Linter's unquoted timestamp form so desktop and server
+    # stamps don't thrash. PyYAML would reserialise and drop all of that.
+    "ruamel.yaml",
 ]
 
 [project.optional-dependencies]

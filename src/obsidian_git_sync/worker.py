@@ -31,7 +31,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from . import config
+from . import config, stamping
 from .events import MCP_WRITE, SYNC_SWEEP, EventQueue
 from .git_ops import GitOps
 
@@ -180,11 +180,23 @@ class GitWorker:
     def _handle_mcp_write(self, event) -> None:
         """Stage the event's paths and commit ``mcp: <op> <paths>`` if anything staged.
 
-        NOTE: frontmatter stamping (the next change) inserts HERE -- stamp the
-        paths before staging them so the stamp lands in the same commit.
+        Frontmatter stamping happens HERE, before staging, so the bumped
+        ``modified`` lands in the same ``mcp:`` commit. Gated by
+        ``VAULT_GITSYNC_STAMP`` and skipped for deletes (there is no file to
+        stamp). event.paths are vault-RELATIVE; the stamper needs absolute paths,
+        so they are resolved against the worker's vault. Stamping is fail-soft
+        (``stamp_paths`` never raises) -- a stamping failure must never stop the
+        commit, so the write still stages and commits, just unstamped.
         """
         if not event.paths:
             return
+        if config.stamp_enabled() and event.operation != "deleted":
+            try:
+                stamping.stamp_paths(
+                    [self.git.vault / p for p in event.paths]
+                )
+            except Exception:
+                logger.exception("git-worker stamping failed; committing unstamped")
         self.git.add(event.paths)
         if self.git.has_staged():
             result = self.git.commit(_mcp_message(event.operation, event.paths))
