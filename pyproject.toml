@@ -1,0 +1,36 @@
+[project]
+name = "obsidian-git-sync-mcp"
+version = "0.1.0"
+description = "Git-sync extension for the obsidian-web-mcp server: commits and syncs vault changes in-process, env-gated and fail-closed."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # Depend on the upstream server via its fork branch: the write-listener seam
+    # the later change-trigger change needs lives on feat/write-listener (PR #62).
+    # TODO: repin to an upstream/PyPI release once PR #62 merges.
+    "obsidian-web-mcp @ git+https://github.com/jjsmackay/obsidian-web-mcp@feat/write-listener",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+obsidian-git-sync-mcp = "obsidian_git_sync.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# The upstream dep is a direct git reference (until PR #62 merges); hatchling
+# rejects direct references in project metadata unless explicitly allowed.
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/obsidian_git_sync"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
