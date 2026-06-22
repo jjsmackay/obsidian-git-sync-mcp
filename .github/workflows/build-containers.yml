@@ -1,0 +1,75 @@
+# Builds both images of the stack — the `mcp` image (root Dockerfile) and the
+# `obsidian-sync` sidecar (obsidian-sync/Dockerfile). Pull requests build only;
+# pushes to main and v* tags build and publish to GHCR.
+#
+# No secrets to configure: GHCR auth uses the built-in GITHUB_TOKEN. The mcp
+# build resolves the upstream obsidian-web-mcp git pin over https at install
+# time, so the build needs outbound network to GitHub (public repo, no cred).
+name: build-containers
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mcp
+            context: .
+            dockerfile: Dockerfile
+            image: obsidian-git-sync-mcp
+          - name: sync
+            context: obsidian-sync
+            dockerfile: obsidian-sync/Dockerfile
+            image: obsidian-git-sync-mcp-sync
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Skipped on pull requests: PRs build-only, and a fork PR has no write token.
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags derive from the event ref so nothing is hardcoded: latest on the
+      # default branch, the semver on v* tags, and the commit SHA on every build.
+      - name: Derive tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
