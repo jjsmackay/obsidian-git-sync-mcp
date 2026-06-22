@@ -2,7 +2,7 @@
 
 - [x] 1.1 Create `.github/workflows/build-containers.yml` with `name`, and triggers: `push` on `main` and `v*` tags, `pull_request` on `main`
 - [x] 1.2 Declare `permissions: { contents: read, packages: write }`
-- [x] 1.3 Define a build job with a matrix over the two images: `{name: mcp, context: ., dockerfile: Dockerfile, image: obsidian-git-sync-mcp}` and `{name: sync, context: obsidian-sync, dockerfile: obsidian-sync/Dockerfile, image: obsidian-git-sync-mcp-sync}`
+- [x] 1.3 Define a build job with a matrix over the two images: `{name: mcp, context: ., dockerfile: Dockerfile, image: obsidian-mcp}` and `{name: sync, context: obsidian-sync, dockerfile: obsidian-sync/Dockerfile, image: obsidian-sync}`
 
 ## 2. Build steps
 

@@ -28,11 +28,11 @@ jobs:
           - name: mcp
             context: .
             dockerfile: Dockerfile
-            image: obsidian-git-sync-mcp
+            image: obsidian-mcp
           - name: sync
             context: obsidian-sync
             dockerfile: obsidian-sync/Dockerfile
-            image: obsidian-git-sync-mcp-sync
+            image: obsidian-sync
 
     steps:
       - name: Checkout

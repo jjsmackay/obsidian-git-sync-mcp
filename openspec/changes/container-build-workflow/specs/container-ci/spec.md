@@ -41,8 +41,8 @@ pull-request events.
 
 On push to `main` and on `v*` tags the workflow SHALL push both built images to
 the GitHub Container Registry under the repository owner's namespace
-(`ghcr.io/<owner>/obsidian-git-sync-mcp` for the `mcp` image and a distinct
-repository for the `obsidian-sync` image). The workflow SHALL authenticate to
+(`ghcr.io/<owner>/obsidian-mcp` for the `mcp` image and
+`ghcr.io/<owner>/obsidian-sync` for the sidecar image). The workflow SHALL authenticate to
 GHCR using the built-in `GITHUB_TOKEN` and SHALL declare `packages: write`
 permission; it SHALL NOT require any manually configured secret.
 

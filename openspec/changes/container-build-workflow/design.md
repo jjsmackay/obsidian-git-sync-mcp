@@ -45,8 +45,8 @@ one exists. This change ships the workflow so it is ready when the remote lands.
 
 **Single workflow, two build jobs (or a matrix), not two workflows.** Both images
 share triggers, registry, permissions, and login. A matrix over
-`{mcp: {context: ., image: obsidian-git-sync-mcp}, sync: {context: obsidian-sync,
-image: obsidian-git-sync-mcp-sync}}` keeps the logic in one place and runs the two
+`{mcp: {context: ., image: obsidian-mcp}, sync: {context: obsidian-sync,
+image: obsidian-sync}}` keeps the logic in one place and runs the two
 builds in parallel. Two separate workflow files would duplicate the login and
 metadata wiring.
 
