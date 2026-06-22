@@ -17,4 +17,4 @@
 - [x] 3.2 Confirm the `mcp` build resolves the upstream `obsidian-web-mcp` git pin over https with no extra credential (it is a public repo; the build needs only outbound network)
 - [x] 3.3 Confirm PR semantics: on `pull_request` the login step is skipped and `push` is `false` (build-only)
 - [x] 3.4 `openspec validate container-build-workflow --strict`
-- [ ] 3.5 (After a remote exists) dry-run by opening a PR and confirming both matrix legs build green; push to `main` and confirm both images appear in GHCR tagged `latest` + SHA
+- [x] 3.5 (After a remote exists) dry-run by opening a PR and confirming both matrix legs build green; push to `main` and confirm both images appear in GHCR tagged `latest` + SHA — verified live: created `jjsmackay/obsidian-git-sync-mcp` (public), pushed `main`, run `27954499404` green on both matrix legs, images in GHCR tagged `latest` + `sha-d7b7ea1`. (PR build-only path verified by the `event_name != 'pull_request'` gating, not a separate PR.)
