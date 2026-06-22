@@ -1,0 +1,65 @@
+# Compose stack for the git-sync MCP server.
+#
+# Copy .env.example to .env, fill in the required values, then `docker compose up -d`.
+# Only the MCP port is published; put a reverse proxy / Cloudflare Tunnel / Tailscale
+# in front of it for any remote access (see .env.example).
+
+services:
+  mcp:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+
+    # Publish ONLY the MCP port. Nothing else is exposed to the host.
+    ports:
+      - "${VAULT_MCP_PORT:-8420}:${VAULT_MCP_PORT:-8420}"
+
+    volumes:
+      # The vault git working tree. Mount the host path at the container's VAULT_PATH.
+      # The git-sync worker commits (and optionally pushes) from inside this tree, so
+      # it must be writable -- not :ro.
+      - "${VAULT_HOST_PATH:-./vault}:${VAULT_PATH:-/vault}"
+
+      # Pushing needs a credential. Do NOT bake one into the image. Mount it read-only
+      # and point git at it. Two common options:
+      #   1. SSH deploy key (with an `ssh` remote URL in the vault), e.g.:
+      #        - "./secrets/deploy_key:/home/appuser/.ssh/id_ed25519:ro"
+      #      and set the remote to git@github.com:org/vault.git.
+      #   2. A token-bearing https remote URL configured in the vault itself
+      #      (e.g. https://x-access-token:TOKEN@github.com/org/vault.git), so no key
+      #      file is mounted. Keep the token out of git and out of the image.
+
+    # No healthcheck block here on purpose: Compose inherits the image's
+    # HEALTHCHECK (the TCP port check baked into the Dockerfile), so `docker
+    # compose ps` reports health without duplicating the command where it could drift.
+
+  # --- obsidian-sync sidecar ---------------------------------------------------
+  # Optional Obsidian Headless Sync sidecar. Opt-in via the `obsidian` profile:
+  #   docker compose up -d                      # mcp only
+  #   docker compose --profile obsidian up -d   # mcp + obsidian-sync
+  # Requires a one-time interactive bootstrap (ob login + ob sync-setup) into the
+  # named state volume before it can sync -- see obsidian-sync/README.md.
+  obsidian-sync:
+    profiles: ["obsidian"]
+    build: ./obsidian-sync
+    restart: unless-stopped
+
+    # Long-running continuous sync of the shared vault working tree. The path
+    # must match the vault mount below (VAULT_PATH, default /vault).
+    command: ["ob", "sync", "--path", "${VAULT_PATH:-/vault}", "--continuous"]
+
+    volumes:
+      # SAME vault working tree the mcp service mounts. Device edits synced down
+      # by `ob` land here on disk, where the git-sync worker's sweep commits them.
+      - "${VAULT_HOST_PATH:-./vault}:${VAULT_PATH:-/vault}"
+
+      # `ob`'s config + sync state (credentials, per-vault state.db) on a named
+      # volume so they survive restarts. Path is `ob`'s actual config dir for the
+      # image's HOME=/home/ob: $HOME/.config/obsidian-headless.
+      - "obsidian_sync_state:/home/ob/.config/obsidian-headless"
+
+# Named volumes.
+volumes:
+  # Persists the obsidian-sync sidecar's `ob` config + sync state across
+  # restarts. Populated by the one-time bootstrap (see obsidian-sync/README.md).
+  obsidian_sync_state:

@@ -1,0 +1,15 @@
+# Keep the build context small and the image clean. The Dockerfile installs the
+# package from pyproject.toml + src/, so build/dev/test artefacts are not needed.
+.git
+.venv
+__pycache__
+*.pyc
+tests
+openspec
+.claude
+HANDOFF.md
+.pytest_cache
+.env
+# uv.lock is excluded: the image installs from pyproject (`uv pip install .`),
+# not a locked sync, so the lockfile is not part of the build.
+uv.lock
