@@ -326,7 +326,7 @@ _MODIFIED_RE = re.compile(r"^modified: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", r
 
 def test_mcp_write_stamped_within_commit(git_remote_vault, monkeypatch):
     """Enabled stamping -> the mcp: commit's content carries a bumped, unquoted modified."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "true")
+    monkeypatch.setattr(config, "VAULT_GIT_STAMP", "true")
     vault, _bare = git_remote_vault
     (vault / "a.md").write_text("---\ntitle: hi\n---\nbody\n")
 
@@ -342,7 +342,7 @@ def test_mcp_write_stamped_within_commit(git_remote_vault, monkeypatch):
 
 def test_mcp_write_deleted_not_stamped(git_remote_vault, monkeypatch):
     """Operation 'deleted' is never stamped (there is no file to stamp)."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "true")
+    monkeypatch.setattr(config, "VAULT_GIT_STAMP", "true")
     vault, _bare = git_remote_vault
     # Commit a file, then delete it on disk and fire a deleted MCP_WRITE.
     (vault / "gone.md").write_text("---\ntitle: hi\n---\nbody\n")
@@ -365,7 +365,7 @@ def test_mcp_write_deleted_not_stamped(git_remote_vault, monkeypatch):
 
 def test_sweep_does_not_stamp(git_remote_vault, monkeypatch):
     """A SYNC_SWEEP never invokes stamping (device edits arrive pre-stamped)."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "true")
+    monkeypatch.setattr(config, "VAULT_GIT_STAMP", "true")
     vault, _bare = git_remote_vault
     (vault / "note.md").write_text("---\ntitle: hi\n---\nbody\n")
 
@@ -381,8 +381,8 @@ def test_sweep_does_not_stamp(git_remote_vault, monkeypatch):
 
 
 def test_stamping_disabled_commits_file_verbatim(git_remote_vault, monkeypatch):
-    """VAULT_GITSYNC_STAMP=false -> committed file byte-identical to what was written."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "false")
+    """VAULT_GIT_STAMP=false -> committed file byte-identical to what was written."""
+    monkeypatch.setattr(config, "VAULT_GIT_STAMP", "false")
     vault, _bare = git_remote_vault
     written = "---\ntitle: hi\n---\nbody\n"
     (vault / "a.md").write_text(written)
@@ -396,7 +396,7 @@ def test_stamping_disabled_commits_file_verbatim(git_remote_vault, monkeypatch):
 
 def test_mcp_write_malformed_frontmatter_still_committed(git_remote_vault, monkeypatch):
     """Malformed frontmatter is logged, not raised; the file is committed unstamped."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "true")
+    monkeypatch.setattr(config, "VAULT_GIT_STAMP", "true")
     vault, _bare = git_remote_vault
     written = "---\na: b: c\n---\nbody\n"
     (vault / "bad.md").write_text(written)
@@ -429,9 +429,9 @@ def test_enabled_extension_starts_one_worker(gitsync_enabled, git_remote_vault, 
 
     # gitsync_enabled defaults REMOTE="" (commit-only); this vault has a real
     # origin, so allow the worker to use it and validate against it.
-    monkeypatch.setattr(config, "VAULT_GITSYNC_REMOTE", "origin")
-    monkeypatch.setattr(config, "VAULT_GITSYNC_BRANCH", "main")
-    monkeypatch.setattr(config, "VAULT_GITSYNC_PUSH_DEBOUNCE", "0.05")
+    monkeypatch.setattr(config, "VAULT_GIT_REMOTE", "origin")
+    monkeypatch.setattr(config, "VAULT_GIT_BRANCH", "main")
+    monkeypatch.setattr(config, "VAULT_GIT_PUSH_DEBOUNCE", "0.05")
 
     ext = GitSyncExtension()
     ext.before_indexes_start(FrontmatterIndex())
@@ -449,14 +449,14 @@ def test_enabled_extension_starts_one_worker(gitsync_enabled, git_remote_vault, 
 
 def test_validate_rejects_missing_remote_when_enabled(gitsync_enabled, git_vault_dir, monkeypatch):
     """A configured remote that does not exist fails closed when enabled."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_REMOTE", "origin")  # not added to git_vault_dir
-    with pytest.raises(ValueError, match="VAULT_GITSYNC_REMOTE"):
+    monkeypatch.setattr(config, "VAULT_GIT_REMOTE", "origin")  # not added to git_vault_dir
+    with pytest.raises(ValueError, match="VAULT_GIT_REMOTE"):
         config.validate_gitsync()
 
 
 def test_validate_accepts_existing_remote(gitsync_enabled, git_remote_vault, monkeypatch):
     """A configured remote that exists validates."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_REMOTE", "origin")
+    monkeypatch.setattr(config, "VAULT_GIT_REMOTE", "origin")
     config.validate_gitsync()  # must not raise
 
 
@@ -468,15 +468,15 @@ def test_validate_commit_only_mode_skips_remote_check(gitsync_enabled, git_vault
 
 @pytest.mark.parametrize("bad", ["0", "-1", "notanum", ""])
 def test_validate_rejects_bad_push_debounce(gitsync_enabled, git_vault_dir, monkeypatch, bad):
-    monkeypatch.setattr(config, "VAULT_GITSYNC_PUSH_DEBOUNCE", bad)
-    with pytest.raises(ValueError, match="VAULT_GITSYNC_PUSH_DEBOUNCE"):
+    monkeypatch.setattr(config, "VAULT_GIT_PUSH_DEBOUNCE", bad)
+    with pytest.raises(ValueError, match="VAULT_GIT_PUSH_DEBOUNCE"):
         config.validate_gitsync()
 
 
 @pytest.mark.parametrize("bad", ["0", "-5", "notanum", ""])
 def test_validate_rejects_bad_push_max_interval(gitsync_enabled, git_vault_dir, monkeypatch, bad):
-    monkeypatch.setattr(config, "VAULT_GITSYNC_PUSH_MAX_INTERVAL", bad)
-    with pytest.raises(ValueError, match="VAULT_GITSYNC_PUSH_MAX_INTERVAL"):
+    monkeypatch.setattr(config, "VAULT_GIT_PUSH_MAX_INTERVAL", bad)
+    with pytest.raises(ValueError, match="VAULT_GIT_PUSH_MAX_INTERVAL"):
         config.validate_gitsync()
 
 
@@ -571,8 +571,8 @@ def test_no_heartbeat_url_never_pings(git_remote_vault, monkeypatch):
 
 def test_from_config_passes_heartbeat_url(gitsync_enabled, git_remote_vault, monkeypatch):
     """from_config wires config.heartbeat_url() into the worker."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_REMOTE", "origin")
-    monkeypatch.setattr(config, "VAULT_GITSYNC_HEARTBEAT_URL", _HEARTBEAT_URL)
+    monkeypatch.setattr(config, "VAULT_GIT_REMOTE", "origin")
+    monkeypatch.setattr(config, "VAULT_GIT_HEARTBEAT_URL", _HEARTBEAT_URL)
 
     import obsidian_vault_mcp.config as upstream_config
 
@@ -584,19 +584,19 @@ def test_from_config_passes_heartbeat_url(gitsync_enabled, git_remote_vault, mon
 
 @pytest.mark.parametrize("bad", ["ftp://x", "not-a-url", "http://", "https://:8080/x"])
 def test_validate_rejects_bad_heartbeat_url(gitsync_enabled, git_vault_dir, monkeypatch, bad):
-    monkeypatch.setattr(config, "VAULT_GITSYNC_HEARTBEAT_URL", bad)
-    with pytest.raises(ValueError, match="VAULT_GITSYNC_HEARTBEAT_URL"):
+    monkeypatch.setattr(config, "VAULT_GIT_HEARTBEAT_URL", bad)
+    with pytest.raises(ValueError, match="VAULT_GIT_HEARTBEAT_URL"):
         config.validate_gitsync()
 
 
 def test_validate_rejects_malformed_port_heartbeat_url(gitsync_enabled, git_vault_dir, monkeypatch):
-    monkeypatch.setattr(config, "VAULT_GITSYNC_HEARTBEAT_URL", "http://host:notaport/x")
-    with pytest.raises(ValueError, match="VAULT_GITSYNC_HEARTBEAT_URL"):
+    monkeypatch.setattr(config, "VAULT_GIT_HEARTBEAT_URL", "http://host:notaport/x")
+    with pytest.raises(ValueError, match="VAULT_GIT_HEARTBEAT_URL"):
         config.validate_gitsync()
 
 
 def test_validate_accepts_valid_heartbeat_url(gitsync_enabled, git_vault_dir, monkeypatch):
-    monkeypatch.setattr(config, "VAULT_GITSYNC_HEARTBEAT_URL", _HEARTBEAT_URL)
+    monkeypatch.setattr(config, "VAULT_GIT_HEARTBEAT_URL", _HEARTBEAT_URL)
     config.validate_gitsync()  # must not raise
 
 
@@ -609,7 +609,7 @@ def test_validate_empty_heartbeat_url_is_valid(gitsync_enabled, git_vault_dir):
 def test_validate_error_does_not_echo_url(gitsync_enabled, git_vault_dir, monkeypatch):
     """The validation error names the var but never echoes the (possibly secret) URL."""
     secret = "ftp://secret-host/super-secret-token"
-    monkeypatch.setattr(config, "VAULT_GITSYNC_HEARTBEAT_URL", secret)
+    monkeypatch.setattr(config, "VAULT_GIT_HEARTBEAT_URL", secret)
     with pytest.raises(ValueError) as exc:
         config.validate_gitsync()
     assert "super-secret-token" not in str(exc.value)

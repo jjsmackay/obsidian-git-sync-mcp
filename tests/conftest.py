@@ -3,7 +3,7 @@
 Mirrors the upstream ``tests/conftest.py``: the upstream config reads ``VAULT_PATH``
 at import, so tests set the env var AND patch the already-imported module attribute
 to point at a temp vault. Our ``config.is_enabled()`` / ``validate_gitsync()`` read
-``VAULT_GITSYNC_ENABLED`` and ``VAULT_PATH`` live, so monkeypatching covers both.
+``VAULT_GIT_ENABLED`` and ``VAULT_PATH`` live, so monkeypatching covers both.
 """
 
 from pathlib import Path
@@ -76,9 +76,9 @@ def git_remote_vault(vault_dir, tmp_path):
 @pytest.fixture
 def gitsync_disabled(monkeypatch):
     """Force the extension's enable flag to the disabled (default) state."""
-    monkeypatch.delenv("VAULT_GITSYNC_ENABLED", raising=False)
+    monkeypatch.delenv("VAULT_GIT_ENABLED", raising=False)
     import obsidian_git_sync.config as gs_config
-    monkeypatch.setattr(gs_config, "VAULT_GITSYNC_ENABLED", "")
+    monkeypatch.setattr(gs_config, "VAULT_GIT_ENABLED", "")
 
 
 @pytest.fixture
@@ -87,12 +87,12 @@ def gitsync_enabled(monkeypatch):
 
     Defaults REMOTE to "" so a bare ``git_vault_dir`` (which has no ``origin``)
     validates -- tests that exercise pushing wire up a remote and override
-    ``VAULT_GITSYNC_REMOTE`` back to "origin" themselves (see ``git_remote_vault``).
+    ``VAULT_GIT_REMOTE`` back to "origin" themselves (see ``git_remote_vault``).
     """
-    monkeypatch.setenv("VAULT_GITSYNC_ENABLED", "true")
+    monkeypatch.setenv("VAULT_GIT_ENABLED", "true")
     import obsidian_git_sync.config as gs_config
-    monkeypatch.setattr(gs_config, "VAULT_GITSYNC_ENABLED", "true")
-    monkeypatch.setattr(gs_config, "VAULT_GITSYNC_REMOTE", "")
+    monkeypatch.setattr(gs_config, "VAULT_GIT_ENABLED", "true")
+    monkeypatch.setattr(gs_config, "VAULT_GIT_REMOTE", "")
 
 
 @pytest.fixture(autouse=True)
@@ -102,10 +102,10 @@ def stamping_disabled_by_default(monkeypatch):
     Stamping defaults ON in production, but most worker tests assert byte-exact
     file/commit content unrelated to timestamps; leaving stamping on would inject
     frontmatter into their .md fixtures. Tests that exercise stamping re-enable it
-    by setting ``config.VAULT_GITSYNC_STAMP`` to a truthy value themselves.
+    by setting ``config.VAULT_GIT_STAMP`` to a truthy value themselves.
     """
     import obsidian_git_sync.config as gs_config
-    monkeypatch.setattr(gs_config, "VAULT_GITSYNC_STAMP", "false")
+    monkeypatch.setattr(gs_config, "VAULT_GIT_STAMP", "false")
 
 
 @pytest.fixture(autouse=True)

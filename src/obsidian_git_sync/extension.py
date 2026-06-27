@@ -56,7 +56,7 @@ class GitSyncExtension(extensions.Extension):
         change is missed between build and attach. Disabled: log and return.
         """
         if not self._enabled:
-            logger.info("git-sync extension loaded but DISABLED (VAULT_GITSYNC_ENABLED not truthy)")
+            logger.info("git-sync extension loaded but DISABLED (VAULT_GIT_ENABLED not truthy)")
             return
 
         config.validate_gitsync()

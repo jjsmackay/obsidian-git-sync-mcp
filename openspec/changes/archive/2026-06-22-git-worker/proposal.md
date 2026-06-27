@@ -47,7 +47,7 @@ cron with structural single-thread serialisation.
 
 - New code: `git_ops.py` (thin `git` CLI wrapper) and `worker.py` (the consumer
   thread + commit/push policy); worker start/stop wired into `extension.py`.
-- New `VAULT_GITSYNC_*` config: remote (optional — empty = commit-only), branch,
+- New `VAULT_GIT_*` config: remote (optional — empty = commit-only), branch,
   push debounce + max interval, optional commit author identity (names
   provisional).
 - Drives the `git` CLI as a subprocess (no libgit2/pygit2), against the upstream

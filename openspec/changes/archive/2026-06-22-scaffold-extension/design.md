@@ -19,7 +19,7 @@ and when gated on with bad config it refuses to start. No git work happens yet.
 
 - A `GitSyncExtension(Extension)` that loads via `serve(extensions=[...])` and
   participates cleanly in the server lifecycle.
-- Configuration entirely from `VAULT_GITSYNC_*` env vars, disabled by default,
+- Configuration entirely from `VAULT_GIT_*` env vars, disabled by default,
   a true no-op when disabled.
 - A `validate_gitsync()` that runs once at startup and fails closed when enabled
   with invalid config.
@@ -48,7 +48,7 @@ the locked architecture explicitly removes.
 **Disabled by default, env-gated.** The package is open-source-quality and its
 first consumer is a personal vault, but it must be safe to `pip install` into the
 upstream image and have it do nothing until configured. A single enabling
-`VAULT_GITSYNC_*` variable gates the whole extension; everything else is read
+`VAULT_GIT_*` variable gates the whole extension; everything else is read
 only when enabled. Alternative considered: enabled-by-default with a disable
 flag. Rejected — a no-op default is the safe failure mode for a backup/sync
 add-on.

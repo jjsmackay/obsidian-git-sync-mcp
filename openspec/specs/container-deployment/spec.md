@@ -62,14 +62,14 @@ upstream serves no usable inbound health route.
 ### Requirement: Env-example documents the full surface
 
 `.env.example` SHALL document the upstream `VAULT_*` variables the deployment
-needs and ALL `VAULT_GITSYNC_*` variables the code reads, using the finalised
+needs and ALL `VAULT_GIT_*` variables the code reads, using the finalised
 names, with the extension disabled by default.
 
-#### Scenario: Every code-read VAULT_GITSYNC_* var is documented
+#### Scenario: Every code-read VAULT_GIT_* var is documented
 
-- **WHEN** `.env.example` is compared with the `VAULT_GITSYNC_*` names the code reads
+- **WHEN** `.env.example` is compared with the `VAULT_GIT_*` names the code reads
 - **THEN** every variable the code reads appears in `.env.example`, and no
-  documented `VAULT_GITSYNC_*` name is one the code never reads
+  documented `VAULT_GIT_*` name is one the code never reads
 
 #### Scenario: Safe defaults
 

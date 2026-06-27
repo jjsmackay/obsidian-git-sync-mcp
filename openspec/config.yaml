@@ -65,7 +65,7 @@ context: |
       launching `serve([GitSyncExtension()])`.
 
   Quality bar (the upstream "house pattern", from #45): env-gated config
-    (`VAULT_GITSYNC_*`), a `validate_gitsync()` that fails CLOSED at startup,
+    (`VAULT_GIT_*`), a `validate_gitsync()` that fails CLOSED at startup,
     worker failures logged and swallowed (never crash the MCP server),
     unit-tested. Monitoring is a generic push-URL heartbeat (Uptime Kuma /
     Healthchecks / any) plus a container HEALTHCHECK; an optional `/health`
@@ -136,7 +136,7 @@ rules:
 
   tasks:
     - Use uv and hatchling. No setuptools, no requirements.txt, no Node tooling.
-    - Gate every git-sync behaviour behind `VAULT_GITSYNC_*` env vars and prove
+    - Gate every git-sync behaviour behind `VAULT_GIT_*` env vars and prove
       the disabled path stays a bootable no-op in tests.
     - Unit-test the worker with a throwaway local git repo (a tmp `git init`
       and a bare remote); never push to a real remote in tests.

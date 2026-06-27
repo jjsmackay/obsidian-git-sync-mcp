@@ -1,6 +1,6 @@
 ## 1. Config
 
-- [x] 1.1 Add `VAULT_GITSYNC_HEARTBEAT_URL` (raw string, default empty = disabled) + a `heartbeat_url()` accessor
+- [x] 1.1 Add `VAULT_GIT_HEARTBEAT_URL` (raw string, default empty = disabled) + a `heartbeat_url()` accessor
 - [x] 1.2 Extend `validate_gitsync()` (enabled only): when the heartbeat URL is non-empty it must be an http(s) URL with a host; fail closed otherwise (mirror upstream `validate_heartbeat` scheme/host check; never echo the URL)
 
 ## 2. Ping helper
@@ -14,7 +14,7 @@
 
 ## 4. Deployment surface
 
-- [x] 4.1 Add `VAULT_GITSYNC_HEARTBEAT_URL` to `.env.example` (disabled by default, one-line comment)
+- [x] 4.1 Add `VAULT_GIT_HEARTBEAT_URL` to `.env.example` (disabled by default, one-line comment)
 
 ## 5. Tests
 

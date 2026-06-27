@@ -14,7 +14,7 @@ SHALL be accurate to the shipped code and stack.
 
 - **WHEN** an operator reads `README.md`
 - **THEN** it shows copying `.env.example` to `.env` and `docker compose up -d`,
-  and how to enable git sync (`VAULT_GITSYNC_ENABLED`)
+  and how to enable git sync (`VAULT_GIT_ENABLED`)
 
 #### Scenario: Architecture is explained
 
@@ -24,14 +24,14 @@ SHALL be accurate to the shipped code and stack.
 
 ### Requirement: Configuration is documented accurately
 
-The README (or a file it links) SHALL document every `VAULT_GITSYNC_*` variable
+The README (or a file it links) SHALL document every `VAULT_GIT_*` variable
 the code reads, with its default, and the upstream `VAULT_*` variables the
-deployment needs. It SHALL NOT document a `VAULT_GITSYNC_*` variable the code
+deployment needs. It SHALL NOT document a `VAULT_GIT_*` variable the code
 does not read.
 
 #### Scenario: Config table matches the code
 
-- **WHEN** the documented `VAULT_GITSYNC_*` variables are compared with the names
+- **WHEN** the documented `VAULT_GIT_*` variables are compared with the names
   the code reads
 - **THEN** the two sets match exactly
 

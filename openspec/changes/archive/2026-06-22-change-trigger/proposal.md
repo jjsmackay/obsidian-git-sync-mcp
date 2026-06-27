@@ -52,7 +52,7 @@ worker will consume.
 - New dependency on upstream symbols: `write_events.register_write_listener`
   (#62, fork branch `feat/write-listener`) and
   `FrontmatterIndex.add_change_listener`.
-- New `VAULT_GITSYNC_*` config: the sweep interval (name provisional).
+- New `VAULT_GIT_*` config: the sweep interval (name provisional).
 - Without the worker (next change) the queue grows unbounded in a running
   server; the two changes ship back-to-back, so this is a within-branch interim
   state, noted not hidden.

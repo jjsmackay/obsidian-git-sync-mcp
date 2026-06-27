@@ -3,7 +3,7 @@
 The extension is a Python package with no way to run it as a service. This change
 makes it deployable: a container image that runs the upstream MCP server with our
 git-sync extension loaded, and a Compose stack to operate it. It also finalises
-the `VAULT_GITSYNC_*` env-var names (until now provisional) in a single
+the `VAULT_GIT_*` env-var names (until now provisional) in a single
 `.env.example`.
 
 ## What Changes
@@ -24,7 +24,7 @@ the `VAULT_GITSYNC_*` env-var names (until now provisional) in a single
   reserved/auth-exempt with no handler). The monitoring change adds the outbound
   push heartbeat.
 - Add `.env.example` documenting the full runtime surface — the upstream
-  `VAULT_*` vars and **all** `VAULT_GITSYNC_*` vars with their finalised names —
+  `VAULT_*` vars and **all** `VAULT_GIT_*` vars with their finalised names —
   and a `.dockerignore`.
 
 ## Capabilities
@@ -41,7 +41,7 @@ the `VAULT_GITSYNC_*` env-var names (until now provisional) in a single
 ## Impact
 
 - New files: `Dockerfile`, `docker-compose.yml`, `.env.example`, `.dockerignore`.
-- Finalises the `VAULT_GITSYNC_*` names (resolves the HANDOFF "provisional names"
+- Finalises the `VAULT_GIT_*` names (resolves the HANDOFF "provisional names"
   flag): `ENABLED`, `SWEEP_INTERVAL`, `REMOTE`, `BRANCH`, `PUSH_DEBOUNCE`,
   `PUSH_MAX_INTERVAL`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `STAMP`.
 - Operational surface: the vault must be a git working tree on a persisted

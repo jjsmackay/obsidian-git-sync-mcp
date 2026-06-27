@@ -28,7 +28,7 @@ idempotent.
   — device edits arrive already stamped by the desktop Linter and flow through
   the sweep untouched (exactly the "device edits skipped" behaviour the gate
   describes).
-- Gate the whole behaviour behind `VAULT_GITSYNC_STAMP` (default enabled); off
+- Gate the whole behaviour behind `VAULT_GIT_STAMP` (default enabled); off
   leaves MCP-written files exactly as the client sent them.
 
 ## Capabilities
@@ -47,7 +47,7 @@ idempotent.
 - New code: `stamping.py` (the porter); a call into it from the worker's
   `_handle_mcp_write` before staging.
 - New dependency: `ruamel.yaml` (formatting-preserving YAML, as the origin used).
-- New `VAULT_GITSYNC_*` config: `STAMP` toggle (provisional name).
+- New `VAULT_GIT_*` config: `STAMP` toggle (provisional name).
 - Behaviour note: when enabled, stamping **adds** a frontmatter block to an
   MCP-written `.md` that has none (faithful to the origin). Operators who do not
-  use timestamp frontmatter set `VAULT_GITSYNC_STAMP=false`.
+  use timestamp frontmatter set `VAULT_GIT_STAMP=false`.

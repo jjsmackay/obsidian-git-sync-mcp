@@ -48,8 +48,8 @@ Copied as-is, git sync is **disabled** — a safe, bootable no-op. To turn it on
 set in `.env`:
 
 ```bash
-VAULT_GITSYNC_ENABLED=true
-VAULT_GITSYNC_REMOTE=origin     # or leave empty for commit-only (local backup, never pushes)
+VAULT_GIT_ENABLED=true
+VAULT_GIT_REMOTE=origin     # or leave empty for commit-only (local backup, never pushes)
 ```
 
 Pushing needs a credential the image must not bake in — mount an SSH deploy key
@@ -77,23 +77,23 @@ them.
 | `VAULT_MCP_PUBLIC_URL` | — | Canonical public origin advertised in OAuth discovery and auth challenges. Empty = derive per request. |
 | `VAULT_OAUTH_*` | see `.env.example` | Optional OAuth (client id/secret, login gate, redirect URIs) for the Claude app browser integration. |
 
-### Git-sync extension (`VAULT_GITSYNC_*`)
+### Git-sync extension (`VAULT_GIT_*`)
 
-Disabled by default. Set `VAULT_GITSYNC_ENABLED` truthy to turn the extension
+Disabled by default. Set `VAULT_GIT_ENABLED` truthy to turn the extension
 on, then review the rest.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `VAULT_GITSYNC_ENABLED` | _(empty / off)_ | Master switch. `true`/`1`/`yes`/`on` enables; anything else disables. |
-| `VAULT_GITSYNC_SWEEP_INTERVAL` | `60` | Seconds between periodic full-tree sweeps. Positive integer. |
-| `VAULT_GITSYNC_REMOTE` | `origin` | Remote to push to. Empty = commit-only (local backup, never pushes). |
-| `VAULT_GITSYNC_BRANCH` | _(empty)_ | Branch to push. Empty = the working tree's current branch. |
-| `VAULT_GITSYNC_PUSH_DEBOUNCE` | `10` | Seconds the event queue must be quiet before the worker pushes batched commits. Positive number. |
-| `VAULT_GITSYNC_PUSH_MAX_INTERVAL` | `300` | Upper bound (seconds) on time since last push, so sustained activity still pushes periodically. Positive number. |
-| `VAULT_GITSYNC_GIT_AUTHOR_NAME` | _(empty)_ | Commit author name. Empty = git's configured identity. |
-| `VAULT_GITSYNC_GIT_AUTHOR_EMAIL` | _(empty)_ | Commit author email. Empty = git's configured identity. |
-| `VAULT_GITSYNC_STAMP` | _(empty / on)_ | Frontmatter timestamp stamping. On by default; a falsey value (`0`/`false`/`no`/`off`) commits MCP-written files unstamped. |
-| `VAULT_GITSYNC_HEARTBEAT_URL` | _(empty)_ | Optional http(s) URL pinged after each successful push. Empty = disabled; never fires in commit-only mode. |
+| `VAULT_GIT_ENABLED` | _(empty / off)_ | Master switch. `true`/`1`/`yes`/`on` enables; anything else disables. |
+| `VAULT_GIT_SWEEP_INTERVAL` | `60` | Seconds between periodic full-tree sweeps. Positive integer. |
+| `VAULT_GIT_REMOTE` | `origin` | Remote to push to. Empty = commit-only (local backup, never pushes). |
+| `VAULT_GIT_BRANCH` | _(empty)_ | Branch to push. Empty = the working tree's current branch. |
+| `VAULT_GIT_PUSH_DEBOUNCE` | `10` | Seconds the event queue must be quiet before the worker pushes batched commits. Positive number. |
+| `VAULT_GIT_PUSH_MAX_INTERVAL` | `300` | Upper bound (seconds) on time since last push, so sustained activity still pushes periodically. Positive number. |
+| `VAULT_GIT_GIT_AUTHOR_NAME` | _(empty)_ | Commit author name. Empty = git's configured identity. |
+| `VAULT_GIT_GIT_AUTHOR_EMAIL` | _(empty)_ | Commit author email. Empty = git's configured identity. |
+| `VAULT_GIT_STAMP` | _(empty / on)_ | Frontmatter timestamp stamping. On by default; a falsey value (`0`/`false`/`no`/`off`) commits MCP-written files unstamped. |
+| `VAULT_GIT_HEARTBEAT_URL` | _(empty)_ | Optional http(s) URL pinged after each successful push. Empty = disabled; never fires in commit-only mode. |
 
 ## Obsidian Sync sidecar
 
@@ -126,7 +126,7 @@ Three independent layers, each answering a different question:
   Answers: is the port accepting connections?
 - **Upstream liveness heartbeat** (`VAULT_MCP_HEARTBEAT_URL`) — the upstream
   server's outbound liveness ping. Answers: is the server process alive?
-- **Git-sync push heartbeat** (`VAULT_GITSYNC_HEARTBEAT_URL`) — fired by the
+- **Git-sync push heartbeat** (`VAULT_GIT_HEARTBEAT_URL`) — fired by the
   worker after each successful push. Answers: is sync actually reaching the
   remote? (Never fires in commit-only mode.)
 

@@ -226,17 +226,17 @@ def test_now_utc_format():
 
 def test_stamp_enabled_defaults_on(monkeypatch):
     """Unset (the default) enables stamping -- the project's reason to exist."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "")
+    monkeypatch.setattr(config, "VAULT_GIT_STAMP", "")
     assert config.stamp_enabled() is True
 
 
 def test_stamp_enabled_falsey_disables(monkeypatch):
     """A falsey value opts out."""
     for value in ("false", "0", "no", "off"):
-        monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", value)
+        monkeypatch.setattr(config, "VAULT_GIT_STAMP", value)
         assert config.stamp_enabled() is False
 
 
 def test_stamp_enabled_truthy_enables(monkeypatch):
-    monkeypatch.setattr(config, "VAULT_GITSYNC_STAMP", "true")
+    monkeypatch.setattr(config, "VAULT_GIT_STAMP", "true")
     assert config.stamp_enabled() is True

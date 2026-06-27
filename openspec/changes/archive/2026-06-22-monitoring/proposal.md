@@ -21,7 +21,7 @@ ports that as a git-sync push heartbeat.
   heartbeat (fail-soft — a heartbeat failure never affects sync). It does not
   fire on a failed push or in commit-only mode (no remote → no push → the
   container healthcheck is the liveness signal there).
-- Gate it behind `VAULT_GITSYNC_HEARTBEAT_URL` (empty = disabled), validated
+- Gate it behind `VAULT_GIT_HEARTBEAT_URL` (empty = disabled), validated
   http(s) at startup (fail-closed) like the upstream heartbeat.
 - Document the full monitoring story: container `HEALTHCHECK` (liveness) +
   upstream `VAULT_MCP_HEARTBEAT_URL` (server liveness) + this push heartbeat
@@ -42,6 +42,6 @@ ports that as a git-sync push heartbeat.
 ## Impact
 
 - New code: `heartbeat.py` (the ping helper); a call from the worker's push
-  success path; config + validation for `VAULT_GITSYNC_HEARTBEAT_URL`.
-- New `VAULT_GITSYNC_*` config: `HEARTBEAT_URL` (added to `.env.example`).
+  success path; config + validation for `VAULT_GIT_HEARTBEAT_URL`.
+- New `VAULT_GIT_*` config: `HEARTBEAT_URL` (added to `.env.example`).
 - No new third-party dependency (stdlib `urllib`, as upstream uses).

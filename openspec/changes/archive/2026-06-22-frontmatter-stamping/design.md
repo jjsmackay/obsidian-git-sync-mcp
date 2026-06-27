@@ -20,7 +20,7 @@ endlessly re-stamping each other.
   modified-always, Linter format, formatting-preserving, skip non-`.md`/missing.
 - The mtime-vs-`modified` gate at 1-second granularity (the timestamp format's
   resolution), making stamping idempotent.
-- Integration at the worker's MCP-write seam, gated by `VAULT_GITSYNC_STAMP`.
+- Integration at the worker's MCP-write seam, gated by `VAULT_GIT_STAMP`.
 
 **Non-Goals:**
 
@@ -52,14 +52,14 @@ which would rewrite users' frontmatter and reintroduce thrash.
 
 **Faithful "inject frontmatter if absent", behind a default-on toggle.** The
 origin adds a frontmatter block to a `.md` that has none. That is invasive for a
-general tool, so the whole behaviour sits behind `VAULT_GITSYNC_STAMP` (default
+general tool, so the whole behaviour sits behind `VAULT_GIT_STAMP` (default
 enabled, matching the project's purpose); operators who do not use timestamp
 frontmatter disable it and their files are committed untouched.
 
 ## Risks / Trade-offs
 
 - [Stamping injects frontmatter into a note that had none] → Documented; gated by
-  `VAULT_GITSYNC_STAMP`. Default-on matches the project's first user; off is a
+  `VAULT_GIT_STAMP`. Default-on matches the project's first user; off is a
   one-line opt-out.
 - [A malformed existing frontmatter block could make `ruamel` raise] → `stamp()`
   catches per-file and logs, never propagating (the worker stays fail-soft); the

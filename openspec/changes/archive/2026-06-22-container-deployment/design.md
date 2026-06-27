@@ -15,7 +15,7 @@ already pulls the upstream server (via the `feat/write-listener` git branch) and
 - A Compose `mcp` service that is operable: env-driven, vault mounted, one port,
   restart policy, healthcheck.
 - One `.env.example` that is the authoritative configuration contract and
-  finalises the `VAULT_GITSYNC_*` names.
+  finalises the `VAULT_GIT_*` names.
 
 **Non-Goals:**
 
@@ -48,7 +48,7 @@ proxy / tunnel for remote access. We publish nothing else.
 
 **`.env.example` is the configuration contract.** It lists the upstream `VAULT_*`
 vars the deployment needs (path, token, port, host, allowed hosts, public URL,
-OAuth) and every `VAULT_GITSYNC_*` var, with the extension disabled by default so
+OAuth) and every `VAULT_GIT_*` var, with the extension disabled by default so
 a copy-and-run is a safe no-op. This is where the provisional names are pinned to
 exactly what the code reads.
 

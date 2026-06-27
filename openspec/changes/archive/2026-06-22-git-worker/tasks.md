@@ -5,7 +5,7 @@
 
 ## 2. Config
 
-- [x] 2.1 Add `VAULT_GITSYNC_*` (provisional names): `REMOTE` (default `origin`, empty = commit-only), `BRANCH` (default = current branch), `PUSH_DEBOUNCE` (seconds, default e.g. 10), `PUSH_MAX_INTERVAL` (seconds, default e.g. 300), optional `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`
+- [x] 2.1 Add `VAULT_GIT_*` (provisional names): `REMOTE` (default `origin`, empty = commit-only), `BRANCH` (default = current branch), `PUSH_DEBOUNCE` (seconds, default e.g. 10), `PUSH_MAX_INTERVAL` (seconds, default e.g. 300), optional `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`
 - [x] 2.2 Extend `validate_gitsync()` (enabled only): debounce/max-interval positive numbers; when a remote is set it must exist (`git remote get-url`); fail closed with clear messages
 
 ## 3. Worker

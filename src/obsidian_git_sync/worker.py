@@ -111,7 +111,7 @@ class GitWorker:
 
     @classmethod
     def from_config(cls, events: EventQueue, vault) -> "GitWorker":
-        """Build a worker from ``VAULT_GITSYNC_*`` config (production path).
+        """Build a worker from ``VAULT_GIT_*`` config (production path).
 
         Call only after ``validate_gitsync()`` has accepted the config -- the
         accessors parse here without re-checking.
@@ -186,7 +186,7 @@ class GitWorker:
 
         Frontmatter stamping happens HERE, before staging, so the bumped
         ``modified`` lands in the same ``mcp:`` commit. Gated by
-        ``VAULT_GITSYNC_STAMP`` and skipped for deletes (there is no file to
+        ``VAULT_GIT_STAMP`` and skipped for deletes (there is no file to
         stamp). event.paths are vault-RELATIVE; the stamper needs absolute paths,
         so they are resolved against the worker's vault. Stamping is fail-soft
         (``stamp_paths`` never raises) -- a stamping failure must never stop the

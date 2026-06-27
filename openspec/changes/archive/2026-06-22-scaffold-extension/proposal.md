@@ -19,7 +19,7 @@ first means no later change has to retrofit env-gating or startup validation.
 - Ship our own console entry point that constructs the extension, runs
   `validate_gitsync()`, and calls `serve([GitSyncExtension()])` — mirroring the
   upstream `serve()` fail-closed pattern (`ValueError` → log → `sys.exit(1)`).
-- Read all configuration from `VAULT_GITSYNC_*` environment variables; the
+- Read all configuration from `VAULT_GIT_*` environment variables; the
   extension is **disabled by default** and is a bootable no-op when off — it
   registers nothing and the MCP server behaves exactly as upstream.
 - Add `validate_gitsync()` that **fails closed**: when the extension is enabled
@@ -47,7 +47,7 @@ first means no later change has to retrofit env-gating or startup validation.
 - New dependency on the upstream extension API: `extensions.Extension`,
   `serve(extensions=...)` (upstream #57, `b1da366`); declared against the fork
   branch `feat/write-listener` until PR #62 merges.
-- New runtime configuration surface: the `VAULT_GITSYNC_*` env vars (names
+- New runtime configuration surface: the `VAULT_GIT_*` env vars (names
   provisional; aligned with `.env.example` in the container-deployment change).
 - No behaviour change to the upstream server when the extension is disabled
   (the default). `/health` is reserved by upstream (auth-exempt, no handler) and

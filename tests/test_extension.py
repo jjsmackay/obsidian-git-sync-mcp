@@ -21,7 +21,7 @@ from obsidian_git_sync.extension import GitSyncExtension
 # --- Disabled by default: bootable no-op ---------------------------------------
 
 def test_disabled_by_default_registers_nothing(gitsync_disabled, vault_dir):
-    """No VAULT_GITSYNC_* set: extension is off and adds no tools/routes."""
+    """No VAULT_GIT_* set: extension is off and adds no tools/routes."""
     ext = GitSyncExtension()
     assert ext._enabled is False
 
@@ -52,7 +52,7 @@ def test_disabled_validate_is_noop_even_without_git(gitsync_disabled, vault_dir)
 @pytest.mark.parametrize("falsey", ["", "0", "false", "no", "off", "FALSE", "garbage"])
 def test_explicitly_disabled_registers_nothing(monkeypatch, vault_dir, falsey):
     """A false (or unrecognised) enabling value disables the extension and its work."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_ENABLED", falsey)
+    monkeypatch.setattr(config, "VAULT_GIT_ENABLED", falsey)
     ext = GitSyncExtension()
     assert ext._enabled is False
     ext.before_indexes_start(object())  # no work, no raise

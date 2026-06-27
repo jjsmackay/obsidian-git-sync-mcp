@@ -5,7 +5,7 @@
 
 ## 2. Config
 
-- [x] 2.1 Add the sweep-interval `VAULT_GITSYNC_*` env var (provisional name, e.g. `VAULT_GITSYNC_SWEEP_INTERVAL`), default a sane value (e.g. 60s); parse/validate in `validate_gitsync()` (positive integer), failing closed
+- [x] 2.1 Add the sweep-interval `VAULT_GIT_*` env var (provisional name, e.g. `VAULT_GIT_SWEEP_INTERVAL`), default a sane value (e.g. 60s); parse/validate in `validate_gitsync()` (positive integer), failing closed
 
 ## 3. Producers wired into the extension
 

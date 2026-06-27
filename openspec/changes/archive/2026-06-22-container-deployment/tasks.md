@@ -12,14 +12,14 @@
 
 ## 3. Config surface
 
-- [x] 3.1 `.env.example`: upstream `VAULT_*` (PATH, MCP_TOKEN, MCP_PORT, MCP_HOST=0.0.0.0, ALLOWED_HOSTS, PUBLIC_URL, OAuth) + ALL `VAULT_GITSYNC_*` with finalised names, extension disabled by default, with a one-line comment per var
+- [x] 3.1 `.env.example`: upstream `VAULT_*` (PATH, MCP_TOKEN, MCP_PORT, MCP_HOST=0.0.0.0, ALLOWED_HOSTS, PUBLIC_URL, OAuth) + ALL `VAULT_GIT_*` with finalised names, extension disabled by default, with a one-line comment per var
 - [x] 3.2 `.dockerignore` (exclude `.git`, `.venv`, `__pycache__`, tests, openspec, `.claude`, `HANDOFF.md`)
 
 ## 4. Validation
 
 - [x] 4.1 `docker compose config` validates against a populated `.env` (copy `.env.example`)
 - [x] 4.2 `docker build` succeeds; `docker run --rm <img> git --version` prints a version; the image's `CMD` is the entry point
-- [x] 4.3 Boot check: run the image with no `VAULT_GITSYNC_ENABLED` and a mounted empty vault → server starts and the extension logs loaded-but-DISABLED (no git work). (If a full boot needs more upstream config than is convenient, assert the entry point reaches `serve()` / logs DISABLED and stop the container.)
-- [x] 4.4 Cross-check `.env.example` `VAULT_GITSYNC_*` names against `grep -o 'VAULT_GITSYNC_[A-Z_]*' src/` — exact set match
+- [x] 4.3 Boot check: run the image with no `VAULT_GIT_ENABLED` and a mounted empty vault → server starts and the extension logs loaded-but-DISABLED (no git work). (If a full boot needs more upstream config than is convenient, assert the entry point reaches `serve()` / logs DISABLED and stop the container.)
+- [x] 4.4 Cross-check `.env.example` `VAULT_GIT_*` names against `grep -o 'VAULT_GIT_[A-Z_]*' src/` — exact set match
 - [x] 4.5 `openspec validate container-deployment --strict`
 - [x] 4.6 `uv run pytest` still green (no code regressions)

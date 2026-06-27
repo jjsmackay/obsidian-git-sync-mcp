@@ -17,7 +17,7 @@ expose it safely, and how to monitor it. This change writes them.
   - **Quickstart** — `.env` from `.env.example`, `docker compose up -d`, enabling
     git sync.
   - **Configuration** — a table of the upstream `VAULT_*` vars the deployment
-    needs and every `VAULT_GITSYNC_*` var, defaults included.
+    needs and every `VAULT_GIT_*` var, defaults included.
   - **Obsidian Sync sidecar** — link to `obsidian-sync/README.md` for the
     profile + bootstrap.
   - **Exposure** — only the MCP port is published; document reverse proxy /

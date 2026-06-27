@@ -65,5 +65,5 @@ received.
 
 #### Scenario: Disabled stamping leaves files as received
 
-- **WHEN** `VAULT_GITSYNC_STAMP` is disabled and an `MCP_WRITE` is processed
+- **WHEN** `VAULT_GIT_STAMP` is disabled and an `MCP_WRITE` is processed
 - **THEN** the committed file is byte-identical to what the client wrote

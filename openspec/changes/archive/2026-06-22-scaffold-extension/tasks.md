@@ -2,14 +2,14 @@
 
 - [x] 1.1 Create `pyproject.toml` (uv + hatchling; no setuptools, no requirements.txt, no Node) for distribution `obsidian-git-sync-mcp`, import package `obsidian_git_sync`, `requires-python >=3.12`
 - [x] 1.2 Declare the upstream dependency `obsidian-web-mcp @ git+https://github.com/jjsmackay/obsidian-web-mcp@feat/write-listener` (TODO: repin to upstream once PR #62 merges) and a `dev` extra with pytest
-- [x] 1.3 Lay out the package: a module exposing `GitSyncExtension`, a `config` module for `VAULT_GITSYNC_*`, and a `main` entry point; declare the `[project.scripts]` console script
+- [x] 1.3 Lay out the package: a module exposing `GitSyncExtension`, a `config` module for `VAULT_GIT_*`, and a `main` entry point; declare the `[project.scripts]` console script
 - [x] 1.4 `uv sync` and confirm `uv run pytest` runs an (initially empty) suite green against the installed upstream
 
 ## 2. Configuration & gating
 
-- [x] 2.1 Implement env-var config loading from `VAULT_GITSYNC_*`, with a single enabling variable defaulting to disabled (mirror the upstream `config.py` idiom: raw strings parsed in the validator)
+- [x] 2.1 Implement env-var config loading from `VAULT_GIT_*`, with a single enabling variable defaulting to disabled (mirror the upstream `config.py` idiom: raw strings parsed in the validator)
 - [x] 2.2 Implement `validate_gitsync()` that runs only when enabled and raises `ValueError` on missing/invalid config, with a clear message naming the offending value (never echoing secrets)
-- [x] 2.3 Document each `VAULT_GITSYNC_*` variable where it is read (names provisional; reconciled with `.env.example` in the container-deployment change)
+- [x] 2.3 Document each `VAULT_GIT_*` variable where it is read (names provisional; reconciled with `.env.example` in the container-deployment change)
 
 ## 3. Extension class & entry point
 

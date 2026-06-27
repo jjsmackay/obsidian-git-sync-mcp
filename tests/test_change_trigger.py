@@ -174,8 +174,8 @@ def test_validate_rejects_bad_sweep_interval_when_enabled(
     gitsync_enabled, git_vault_dir, monkeypatch, bad
 ):
     """A non-positive / non-integer sweep interval fails closed when enabled."""
-    monkeypatch.setattr(config, "VAULT_GITSYNC_SWEEP_INTERVAL", bad)
-    with pytest.raises(ValueError, match="VAULT_GITSYNC_SWEEP_INTERVAL"):
+    monkeypatch.setattr(config, "VAULT_GIT_SWEEP_INTERVAL", bad)
+    with pytest.raises(ValueError, match="VAULT_GIT_SWEEP_INTERVAL"):
         config.validate_gitsync()
 
 

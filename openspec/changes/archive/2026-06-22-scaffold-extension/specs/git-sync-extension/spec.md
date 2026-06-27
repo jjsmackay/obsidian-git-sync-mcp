@@ -16,7 +16,7 @@ process as the MCP server; it SHALL NOT spawn a separate process or daemon.
 
 ### Requirement: Extension is env-gated and disabled by default
 
-The extension SHALL read all configuration from `VAULT_GITSYNC_*` environment
+The extension SHALL read all configuration from `VAULT_GIT_*` environment
 variables. It SHALL be disabled by default: when the enabling variable is unset
 or false, the extension SHALL be a no-op — registering no tools and no routes —
 and the MCP server SHALL behave exactly as it does upstream without the
@@ -24,14 +24,14 @@ extension.
 
 #### Scenario: Disabled by default is a bootable no-op
 
-- **WHEN** the server starts with no `VAULT_GITSYNC_*` variables set
+- **WHEN** the server starts with no `VAULT_GIT_*` variables set
 - **THEN** the extension registers no tools and no routes
 - **AND** the server runs identically to an upstream server with no extension
   loaded
 
 #### Scenario: Explicitly disabled
 
-- **WHEN** the enabling `VAULT_GITSYNC_*` variable is set to a false value
+- **WHEN** the enabling `VAULT_GIT_*` variable is set to a false value
 - **THEN** the extension registers nothing and performs no git-sync work
 
 ### Requirement: Startup validation fails closed
@@ -44,7 +44,7 @@ extension SHALL NOT start in a partially-configured state.
 
 #### Scenario: Enabled with valid configuration starts
 
-- **WHEN** the extension is enabled and all required `VAULT_GITSYNC_*` values
+- **WHEN** the extension is enabled and all required `VAULT_GIT_*` values
   are present and valid
 - **THEN** `validate_gitsync()` passes and the server starts
 

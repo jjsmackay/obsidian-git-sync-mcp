@@ -43,7 +43,7 @@ SHALL NOT affect sync.
 
 ### Requirement: Heartbeat configuration is validated fail-closed
 
-When `VAULT_GITSYNC_HEARTBEAT_URL` is set, `validate_gitsync()` SHALL require it
+When `VAULT_GIT_HEARTBEAT_URL` is set, `validate_gitsync()` SHALL require it
 to be an http(s) URL with a host, failing closed at startup otherwise. An empty
 value disables the heartbeat and is always valid.
 

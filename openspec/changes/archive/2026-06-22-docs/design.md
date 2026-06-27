@@ -12,7 +12,7 @@ runtime architecture.
 - One README that takes an operator from zero to a running, git-syncing,
   optionally device-synced deployment, and tells a contributor how to build/test
   and how the upstream relationship works.
-- A configuration table that is verifiably complete (every `VAULT_GITSYNC_*` the
+- A configuration table that is verifiably complete (every `VAULT_GIT_*` the
   code reads) and correct (no invented vars).
 
 **Non-Goals:**
@@ -31,7 +31,7 @@ bootstrap) and `.env.example` (the annotated source of truth) rather than
 restating them, so there is one place to update each fact.
 
 **Config table derived from the code, not hand-invented.** The author cross-checks
-the documented `VAULT_GITSYNC_*` set against `grep -rho 'VAULT_GITSYNC_[A-Z_]*'
+the documented `VAULT_GIT_*` set against `grep -rho 'VAULT_GIT_[A-Z_]*'
 src/` so the table cannot drift from or hallucinate variables. `.env.example`
 already pins names/defaults; the README table mirrors it.
 
