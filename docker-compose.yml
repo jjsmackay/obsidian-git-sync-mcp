@@ -17,17 +17,23 @@ services:
     volumes:
       # The vault git working tree. Mount the host path at the container's VAULT_PATH.
       # The git-sync worker commits (and optionally pushes) from inside this tree, so
-      # it must be writable -- not :ro.
+      # it must be writable -- not :ro. Seed it before enabling git sync: see the
+      # "Git repo bootstrap" section in README.md (the container refuses to boot if
+      # VAULT_GIT_ENABLED=true and this is not a git working tree with the remote).
       - "${VAULT_HOST_PATH:-./vault}:${VAULT_PATH:-/vault}"
 
-      # Pushing needs a credential. Do NOT bake one into the image. Mount it read-only
-      # and point git at it. Two common options:
-      #   1. SSH deploy key (with an `ssh` remote URL in the vault), e.g.:
-      #        - "./secrets/deploy_key:/home/appuser/.ssh/id_ed25519:ro"
-      #      and set the remote to git@github.com:org/vault.git.
-      #   2. A token-bearing https remote URL configured in the vault itself
-      #      (e.g. https://x-access-token:TOKEN@github.com/org/vault.git), so no key
-      #      file is mounted. Keep the token out of git and out of the image.
+      # Pushing needs a credential. Do NOT bake one into the image. Two options:
+      #   1. Token-bearing https remote configured in the vault itself, e.g.
+      #      `git remote set-url origin https://x-access-token:TOKEN@github.com/org/vault.git`.
+      #      The token lives in the vault's .git/config on the volume -- NOTHING to
+      #      mount here, and it works with the image as built. (Recommended.)
+      #   2. SSH deploy key + an `ssh` remote (git@github.com:org/vault.git). Uncomment
+      #      the mount + GIT_SSH_COMMAND below; key must be chmod 600 on the host. The
+      #      image ships openssh-client for this. StrictHostKeyChecking=accept-new
+      #      trusts github.com's host key on first connect.
+      # - "./secrets/deploy_key:/home/appuser/.ssh/id_ed25519:ro"
+    # environment:
+    #   - "GIT_SSH_COMMAND=ssh -i /home/appuser/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new"
 
     # No healthcheck block here on purpose: Compose inherits the image's
     # HEALTHCHECK (the TCP port check baked into the Dockerfile), so `docker

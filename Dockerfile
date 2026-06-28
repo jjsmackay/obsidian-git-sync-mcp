@@ -5,8 +5,11 @@ FROM python:3.12-slim
 # git: the sync worker shells out to it at runtime, and the build resolves the
 #      upstream server dependency (a git+https reference until PR #62 merges).
 # ca-certificates: TLS trust for the git fetch over https.
+# openssh-client: git's SSH transport needs an `ssh` binary on PATH. It is only a
+#      Recommends of `git`, so --no-install-recommends drops it; without it the SSH
+#      deploy-key credential path fails. The token-in-https-URL path does not need it.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends git ca-certificates openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # uv matches the workspace tooling convention; install into the system env.

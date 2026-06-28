@@ -35,7 +35,8 @@ Headless Sync against the same vault working tree.
 
 ## Quickstart
 
-The vault must be a git working tree (the worker commits against it).
+This boots the `mcp` service with git sync **disabled** — no git working tree
+required yet. Enabling sync needs a bootstrapped vault repo (see below).
 
 ```bash
 cp .env.example .env
@@ -44,20 +45,61 @@ cp .env.example .env
 docker compose up -d            # mcp service only
 ```
 
-Copied as-is, git sync is **disabled** — a safe, bootable no-op. To turn it on,
-set in `.env`:
+Copied as-is, git sync is **disabled** — a safe, bootable no-op. Before turning it
+on, bootstrap the vault git repo (next section).
+
+Every variable is annotated in [`.env.example`](.env.example), the configuration
+source of truth.
+
+## Git repo bootstrap
+
+The worker commits against an existing git working tree — it never runs `git
+init` or `git clone` for you. And startup is **fail-closed**: with
+`VAULT_GIT_ENABLED=true`, the `mcp` container *refuses to boot* if `VAULT_PATH`
+is not a git working tree, or if `VAULT_GIT_REMOTE` names a remote the tree does
+not have. So you must seed the repo **before** enabling git sync.
+
+`VAULT_HOST_PATH` can be any host path — `./vault`, `/srv/obsidian/vault`, a
+deployment run directory. Whatever you set, that is where you clone.
+
+**1. Clone your vault into `VAULT_HOST_PATH` on the host:**
+
+```bash
+git clone <your-vault-remote> ./vault   # match VAULT_HOST_PATH
+```
+
+**2. Give the vault a push credential** — pick one:
+
+- **Token in the https remote (recommended; works with the image as built).** The
+  token lives in the vault's `.git/config` on the volume; nothing is mounted.
+
+  ```bash
+  git -C ./vault remote set-url origin \
+    https://x-access-token:<TOKEN>@github.com/<org>/<repo>.git
+  ```
+
+- **SSH deploy key.** Put the key at `./secrets/deploy_key` (`chmod 600`), set an
+  SSH remote, and uncomment the key mount + `GIT_SSH_COMMAND` in
+  [`docker-compose.yml`](docker-compose.yml).
+
+  ```bash
+  git -C ./vault remote set-url origin git@github.com:<org>/<repo>.git
+  ```
+
+**3. Enable git sync** in `.env` and (re)deploy:
 
 ```bash
 VAULT_GIT_ENABLED=true
 VAULT_GIT_REMOTE=origin     # or leave empty for commit-only (local backup, never pushes)
 ```
 
-Pushing needs a credential the image must not bake in — mount an SSH deploy key
-or use a token-bearing https remote configured in the vault. See the comments in
-[`docker-compose.yml`](docker-compose.yml).
+```bash
+docker compose up -d
+```
 
-Every variable is annotated in [`.env.example`](.env.example), the configuration
-source of truth.
+> **Ordering with the obsidian-sync sidecar:** bootstrap the git tree *first*
+> (it establishes the working tree + remote), then run the one-time `ob` bootstrap
+> against the same `/vault` (see [`obsidian-sync/README.md`](obsidian-sync/README.md)).
 
 ## Configuration
 
