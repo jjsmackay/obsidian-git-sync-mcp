@@ -85,21 +85,24 @@ and keeps the vault in step with Obsidian Sync.
 
 ## Re-bootstrap (switch account or redo)
 
-The config volume is sticky, so the entry point will keep using whatever account
-is already there. To start over — wrong account, or rotating accounts — clear the
-config and bootstrap again:
+The config volume is sticky, so the entry point keeps using whatever account is
+already there. To start over — wrong account, or rotating accounts — run
+`bootstrap` with `--reset`:
 
 ```bash
-docker stop <container>                                   # free the config volume
-docker run --rm -v <stack>_config:/c alpine \
-  sh -c 'rm -rf /c/* /c/.[!.]*'                            # wipe credentials + sync state
-docker compose --profile obsidian run --rm obsidian-sync bootstrap   # fresh login
-docker start <container>                                   # back to continuous sync
+docker exec -it <container> bootstrap --reset     # e.g. <stack>-sync
 ```
 
-(A one-off `run` is used for the bootstrap because the sidecar is stopped — don't
-`exec` into a stopped container. `ob logout` alone won't necessarily clear a
-configured vault's sync link, so a clean wipe is the reliable reset.)
+`--reset` confirms first (it's destructive — it discards the stored login and
+sync state under `CONFIG_DIR`), then wipes that config and falls straight through
+to the normal `ob login` → `sync-setup` → status flow, so you can point the
+sidecar at a different account/vault. Because the running idle entry point polls
+for config, continuous sync auto-starts for the new account once the fresh
+bootstrap completes — no manual restart.
+
+(`ob logout` alone won't necessarily clear a configured vault's sync link, so the
+directory wipe is the reliable reset; `--reset` guards the path so it can never
+run against `/` or an empty value.)
 
 ## `ob` command reference (captured from `obsidian-headless@0.0.12`)
 
