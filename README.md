@@ -70,12 +70,15 @@ git clone <your-vault-remote> ./vault   # match VAULT_HOST_PATH
 
 **2. Give the vault a push credential** — pick one:
 
-- **Token in the https remote (recommended; works with the image as built).** The
-  token lives in the vault's `.git/config` on the volume; nothing is mounted.
+- **`VAULT_GIT_TOKEN` (recommended).** Set the token as a single env var; a
+  credential helper hands it to git at push time, so it is **never written to the
+  vault's `.git/config` and never appears on a git command line**. Use a tokenless
+  remote URL; rotate by changing the one value and redeploying.
 
   ```bash
-  git -C ./vault remote set-url origin \
-    https://x-access-token:<TOKEN>@github.com/<org>/<repo>.git
+  git -C ./vault remote set-url origin https://github.com/<org>/<repo>.git
+  # then in .env:
+  VAULT_GIT_TOKEN=<TOKEN>
   ```
 
 - **SSH deploy key.** Put the key at `./secrets/deploy_key` (`chmod 600`), set an
@@ -84,6 +87,16 @@ git clone <your-vault-remote> ./vault   # match VAULT_HOST_PATH
 
   ```bash
   git -C ./vault remote set-url origin git@github.com:<org>/<repo>.git
+  ```
+
+- **Token embedded in the https remote (discouraged).** Writes the token in
+  plaintext into the vault's `.git/config` on the volume, where anything that
+  echoes the remote leaks it and rotation means editing a file inside the volume.
+  Prefer `VAULT_GIT_TOKEN`.
+
+  ```bash
+  git -C ./vault remote set-url origin \
+    https://x-access-token:<TOKEN>@github.com/<org>/<repo>.git
   ```
 
 **3. Give the worker a commit identity.** Git refuses to commit without one, so
@@ -120,10 +133,13 @@ with a one-off container that clones *and* fixes ownership:
 ```bash
 docker run --rm -v <stack>_vault:/vault <mcp-image> \
   sh -c 'git clone https://x-access-token:<TOKEN>@github.com/<org>/<repo>.git /vault \
+         && git -C /vault remote set-url origin https://github.com/<org>/<repo>.git \
          && chown -R 10001:10001 /vault'
 ```
 
-Then enable git sync and deploy as above. (The `obsidian-sync` image avoids this for
+The `remote set-url` resets the remote to a tokenless URL so the one-off clone
+token does not persist in the volume's `.git/config`; set `VAULT_GIT_TOKEN` for
+the ongoing pushes. Then enable git sync and deploy as above. (The `obsidian-sync` image avoids this for
 its own `config` volume by pre-creating the dir — the vault volume has no such fix.)
 
 ## Configuration
@@ -155,6 +171,7 @@ on, then review the rest.
 | `VAULT_GIT_SWEEP_INTERVAL` | `60` | Seconds between periodic full-tree sweeps. Positive integer. |
 | `VAULT_GIT_REMOTE` | `origin` | Remote to push to. Empty = commit-only (local backup, never pushes). |
 | `VAULT_GIT_BRANCH` | _(empty)_ | Branch to push. Empty = the working tree's current branch. |
+| `VAULT_GIT_TOKEN` | _(empty)_ | HTTPS push credential, supplied to git at push time by a credential helper (never written to `.git/config`, never on a command line). Required for a tokenless HTTPS remote — startup fails closed without it; not needed for SSH or an embedded-credential URL. |
 | `VAULT_GIT_PUSH_DEBOUNCE` | `10` | Seconds the event queue must be quiet before the worker pushes batched commits. Positive number. |
 | `VAULT_GIT_PUSH_MAX_INTERVAL` | `300` | Upper bound (seconds) on time since last push, so sustained activity still pushes periodically. Positive number. |
 | `VAULT_GIT_GIT_AUTHOR_NAME` | _(empty)_ | Commit author name. Empty = git's configured identity. |

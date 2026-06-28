@@ -32,6 +32,7 @@ import time
 from datetime import datetime, timezone
 
 from . import config, heartbeat, stamping
+from .credential_helper import HELPER_NAME
 from .events import MCP_WRITE, SYNC_SWEEP, EventQueue
 from .git_ops import GitOps
 
@@ -116,10 +117,13 @@ class GitWorker:
         Call only after ``validate_gitsync()`` has accepted the config -- the
         accessors parse here without re-checking.
         """
+        # Wire the env-reading credential helper only when a token is configured;
+        # otherwise leave git's credential resolution untouched (today's behaviour).
         git = GitOps(
             vault,
             author_name=config.author_name(),
             author_email=config.author_email(),
+            credential_helper=HELPER_NAME if config.token() else None,
         )
         return cls(
             events,

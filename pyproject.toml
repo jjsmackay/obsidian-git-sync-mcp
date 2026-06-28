@@ -24,6 +24,9 @@ dev = [
 
 [project.scripts]
 obsidian-git-sync-mcp = "obsidian_git_sync.main:main"
+# Env-reading git credential helper. The name maps to the ``credential.helper``
+# value ``obsidian-env`` (git prefixes ``git-credential-``); see credential_helper.py.
+git-credential-obsidian-env = "obsidian_git_sync.credential_helper:main"
 
 [build-system]
 requires = ["hatchling"]

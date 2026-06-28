@@ -59,11 +59,17 @@ class GitOps:
         timeout: float = DEFAULT_TIMEOUT,
         author_name: str | None = None,
         author_email: str | None = None,
+        credential_helper: str | None = None,
     ) -> None:
         self.vault = Path(vault)
         self.timeout = timeout
         self.author_name = author_name
         self.author_email = author_email
+        # The git ``credential.helper`` NAME (not the secret) used for network
+        # operations; None leaves git's credential resolution untouched. The token
+        # itself is read from the environment by the helper, so it never reaches
+        # this object nor any argv.
+        self.credential_helper = credential_helper
 
     def _run(self, *args: str) -> GitResult:
         """Run ``git -C <vault> <args>`` and capture its result.
@@ -98,6 +104,18 @@ class GitOps:
         if self.author_email:
             args += ["-c", f"user.email={self.author_email}"]
         return args
+
+    def _credential_args(self) -> list[str]:
+        """``-c credential.helper= -c credential.helper=<name>`` for network ops.
+
+        The empty value first CLEARS any inherited system/global helper for this
+        invocation, then our env-reading helper is set, so only it is consulted.
+        Returns no args when no helper is configured (today's behaviour). Carries
+        only the helper name -- never the token, which the helper reads from env.
+        """
+        if not self.credential_helper:
+            return []
+        return ["-c", "credential.helper=", "-c", f"credential.helper={self.credential_helper}"]
 
     # --- Staging -----------------------------------------------------------
 
@@ -147,7 +165,7 @@ class GitOps:
     def fetch(self, remote: str) -> GitResult:
         """Fetch from ``remote``. A non-ok result (offline) is the caller's signal
         to skip the rebase but still try the push."""
-        return self._run("fetch", remote)
+        return self._run(*self._credential_args(), "fetch", remote)
 
     def rebase_theirs(self, remote: str, branch: str) -> GitResult:
         """Rebase local commits onto ``<remote>/<branch>`` with local-wins conflict
@@ -167,7 +185,7 @@ class GitOps:
     def push(self, remote: str, branch: str) -> GitResult:
         """Push ``branch`` to ``remote``. A non-ok result (rejected/offline) is
         logged and swallowed by the caller; the commits retry next cycle."""
-        return self._run("push", remote, branch)
+        return self._run(*self._credential_args(), "push", remote, branch)
 
     # --- Topology ----------------------------------------------------------
 

@@ -17,6 +17,7 @@ container-deployment change.
 
 import os
 import subprocess
+from urllib.parse import urlsplit
 
 # Single enabling flag for the whole extension. Empty/unset = disabled (the default).
 # Kept as a raw string and parsed in is_enabled() so an unrecognised value fails
@@ -88,6 +89,15 @@ VAULT_GIT_HEARTBEAT_URL = os.environ.get("VAULT_GIT_HEARTBEAT_URL", "")
 #   VAULT_GIT_STAMP -- a falsey string ("0"/"false"/"no"/"off") disables;
 #   anything else (including unset) enables.
 VAULT_GIT_STAMP = os.environ.get("VAULT_GIT_STAMP", "")
+
+# Optional HTTPS push credential. When set, it is supplied to git at invocation
+# time by the env-reading credential helper (credential_helper.py) so the token is
+# never written to .git/config nor passed on a git argv. EMPTY = no token (the
+# credential is resolved by git as usual, e.g. an SSH key or a URL-embedded token).
+# Kept raw and read in token(); never echoed in errors/logs (it is a secret).
+#
+#   VAULT_GIT_TOKEN -- the HTTPS push token, or "" for none (default "").
+VAULT_GIT_TOKEN = os.environ.get("VAULT_GIT_TOKEN", "")
 
 _TRUTHY = {"1", "true", "yes", "on"}
 _FALSEY = {"0", "false", "no", "off"}
@@ -174,6 +184,15 @@ def author_name() -> str | None:
 def author_email() -> str | None:
     """The configured commit author email, or None when unset."""
     return VAULT_GIT_GIT_AUTHOR_EMAIL.strip() or None
+
+
+def token() -> str:
+    """Return the configured HTTPS push token, or "" when none is set.
+
+    Stripped so trailing whitespace from an env file is not mistaken for a token.
+    The value is a secret -- callers must never log it.
+    """
+    return VAULT_GIT_TOKEN.strip()
 
 
 def heartbeat_url() -> str:
@@ -264,14 +283,28 @@ def validate_gitsync() -> None:
                 f"does not exist in the vault at VAULT_PATH"
             )
 
+        # Credential presence (fail closed before the first push). An HTTPS remote
+        # whose URL carries no embedded credential needs VAULT_GIT_TOKEN (supplied
+        # at push time by the credential helper). An SSH remote authenticates by
+        # key, and an HTTPS URL that already embeds a credential carries its own --
+        # neither needs a token. The URL may embed a secret, so it is parsed but
+        # never echoed: the message names only the config vars.
+        remote_url = result.stdout.strip()
+        parsed = urlsplit(remote_url)
+        is_https = parsed.scheme.lower() in ("http", "https")
+        has_embedded_credential = bool(parsed.username)
+        if is_https and not has_embedded_credential and not token():
+            raise ValueError(
+                "git-sync is enabled with an HTTPS VAULT_GIT_REMOTE but no push "
+                "credential is configured; set VAULT_GIT_TOKEN"
+            )
+
     # Optional push heartbeat. Empty = disabled (valid). When set, it must be an
     # http(s) URL with a host, mirroring upstream validate_heartbeat (incl. the
     # port-parse so a malformed port fails closed). The URL is a capability URL
     # (secret in the path), so the messages name only the var, never the value.
     hb_url = heartbeat_url()
     if hb_url:
-        from urllib.parse import urlsplit
-
         try:
             parsed = urlsplit(hb_url)
             port = parsed.port  # raises ValueError on a malformed port

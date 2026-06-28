@@ -486,6 +486,132 @@ def test_validate_accepts_default_push_timing(gitsync_enabled, git_vault_dir):
     assert config.push_max_interval() == 300.0
 
 
+# --- Push credential: VAULT_GIT_TOKEN (spec: git-credential-helper) -------------
+
+def test_token_reads_env_stripped(monkeypatch):
+    """``token()`` returns the configured token with surrounding whitespace removed."""
+    monkeypatch.setattr(config, "VAULT_GIT_TOKEN", "  ghp_abc123  ")
+    assert config.token() == "ghp_abc123"
+
+
+def test_token_empty_when_unset(monkeypatch):
+    """An unset/empty ``VAULT_GIT_TOKEN`` yields the empty string (no token)."""
+    monkeypatch.setattr(config, "VAULT_GIT_TOKEN", "")
+    assert config.token() == ""
+
+
+def _set_remote_url(vault, url, monkeypatch):
+    """Point ``origin`` at ``url`` and select it as the configured remote."""
+    _git(vault, "remote", "add", "origin", url)
+    monkeypatch.setattr(config, "VAULT_GIT_REMOTE", "origin")
+    monkeypatch.setattr(config, "VAULT_GIT_TOKEN", "")
+
+
+def test_validate_rejects_https_remote_without_token(gitsync_enabled, git_vault_dir, monkeypatch):
+    """A tokenless HTTPS remote with no VAULT_GIT_TOKEN fails closed at startup."""
+    url = "https://github.com/owner/secret-repo.git"
+    _set_remote_url(git_vault_dir, url, monkeypatch)
+
+    with pytest.raises(ValueError, match="VAULT_GIT_TOKEN") as exc:
+        config.validate_gitsync()
+
+    # The message names the missing credential but never echoes the remote URL.
+    assert "owner/secret-repo" not in str(exc.value)
+    assert url not in str(exc.value)
+
+
+def test_validate_accepts_https_remote_with_token(gitsync_enabled, git_vault_dir, monkeypatch):
+    """A tokenless HTTPS remote validates once VAULT_GIT_TOKEN is set."""
+    _set_remote_url(git_vault_dir, "https://github.com/owner/repo.git", monkeypatch)
+    monkeypatch.setattr(config, "VAULT_GIT_TOKEN", "ghp_token")
+    config.validate_gitsync()  # must not raise
+
+
+def test_validate_ssh_remote_needs_no_token(gitsync_enabled, git_vault_dir, monkeypatch):
+    """An SSH remote authenticates by key, so no token is required."""
+    _set_remote_url(git_vault_dir, "git@github.com:owner/repo.git", monkeypatch)
+    config.validate_gitsync()  # must not raise
+
+
+def test_validate_embedded_credential_remote_needs_no_token(gitsync_enabled, git_vault_dir, monkeypatch):
+    """An HTTPS URL that already embeds a credential validates without a token."""
+    _set_remote_url(
+        git_vault_dir, "https://x-access-token:tok@github.com/owner/repo.git", monkeypatch
+    )
+    config.validate_gitsync()  # must not raise
+
+
+# --- GitOps credential-helper wiring (spec: git-credential-helper) --------------
+
+def _capture_git_calls(monkeypatch):
+    """Record every argv GitOps hands to subprocess.run; each call succeeds (rc 0)."""
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kw):
+        calls.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("obsidian_git_sync.git_ops.subprocess.run", fake_run)
+    return calls
+
+
+def test_fetch_prepends_credential_helper(monkeypatch):
+    """fetch clears any inherited helper then sets the env helper, before the subcommand."""
+    calls = _capture_git_calls(monkeypatch)
+    GitOps("/vault", credential_helper="obsidian-env").fetch("origin")
+    assert calls[0] == [
+        "git", "-C", "/vault",
+        "-c", "credential.helper=", "-c", "credential.helper=obsidian-env",
+        "fetch", "origin",
+    ]
+
+
+def test_push_prepends_credential_helper(monkeypatch):
+    calls = _capture_git_calls(monkeypatch)
+    GitOps("/vault", credential_helper="obsidian-env").push("origin", "main")
+    assert calls[0] == [
+        "git", "-C", "/vault",
+        "-c", "credential.helper=", "-c", "credential.helper=obsidian-env",
+        "push", "origin", "main",
+    ]
+
+
+def test_non_network_ops_omit_credential_helper(monkeypatch):
+    """rebase ops never touch the remote, so they carry no credential config."""
+    calls = _capture_git_calls(monkeypatch)
+    ops = GitOps("/vault", credential_helper="obsidian-env")
+    ops.rebase_theirs("origin", "main")
+    ops.rebase_abort()
+    for cmd in calls:
+        assert not any("credential.helper" in part for part in cmd)
+
+
+def test_no_helper_leaves_invocation_unchanged(monkeypatch):
+    """Without a configured helper, fetch is exactly today's argv (no new -c args)."""
+    calls = _capture_git_calls(monkeypatch)
+    GitOps("/vault").fetch("origin")
+    assert calls[0] == ["git", "-C", "/vault", "fetch", "origin"]
+
+
+def test_from_config_sets_credential_helper_when_token(vault_dir, monkeypatch):
+    """from_config wires the env helper into GitOps when a token is configured."""
+    from obsidian_git_sync.credential_helper import HELPER_NAME
+    from obsidian_git_sync.events import EventQueue
+
+    monkeypatch.setattr(config, "VAULT_GIT_TOKEN", "ghp_token")
+    w = GitWorker.from_config(EventQueue(), vault_dir)
+    assert w.git.credential_helper == HELPER_NAME
+
+
+def test_from_config_no_credential_helper_without_token(vault_dir, monkeypatch):
+    """from_config leaves the helper unset when no token is configured."""
+    from obsidian_git_sync.events import EventQueue
+
+    monkeypatch.setattr(config, "VAULT_GIT_TOKEN", "")
+    w = GitWorker.from_config(EventQueue(), vault_dir)
+    assert w.git.credential_helper is None
+
+
 # --- Push heartbeat (spec: monitoring) -----------------------------------------
 
 _HEARTBEAT_URL = "https://monitor.example/ping/abc123"
