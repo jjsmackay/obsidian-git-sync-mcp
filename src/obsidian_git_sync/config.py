@@ -299,6 +299,31 @@ def validate_gitsync() -> None:
                 "credential is configured; set VAULT_GIT_TOKEN"
             )
 
+    # Committer identity must be resolvable (fail closed before the first commit).
+    # The worker commits with ``-c user.name=…/-c user.email=…`` only when the
+    # VAULT_GIT_GIT_AUTHOR_* identity is set; otherwise git falls back to host
+    # config. If neither resolves BOTH name and email, every commit fails rc=128
+    # ("unable to auto-detect email") -- silently, per-commit, at runtime. Ask git
+    # itself, with the SAME overrides the worker applies, so the check sees the
+    # identity a commit would: ``git var GIT_AUTHOR_IDENT`` exits non-zero when
+    # none is resolvable. The identity is not echoed; the message names the remedy.
+    identity_args: list[str] = []
+    if name := author_name():
+        identity_args += ["-c", f"user.name={name}"]
+    if email := author_email():
+        identity_args += ["-c", f"user.email={email}"]
+    result = subprocess.run(
+        ["git", "-C", str(VAULT_PATH), *identity_args, "var", "GIT_AUTHOR_IDENT"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ValueError(
+            "git-sync is enabled but git cannot resolve a committer identity; set "
+            "VAULT_GIT_GIT_AUTHOR_NAME and VAULT_GIT_GIT_AUTHOR_EMAIL"
+        )
+
     # Optional push heartbeat. Empty = disabled (valid). When set, it must be an
     # http(s) URL with a host, mirroring upstream validate_heartbeat (incl. the
     # port-parse so a malformed port fails closed). The URL is a capability URL

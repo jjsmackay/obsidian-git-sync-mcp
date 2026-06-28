@@ -541,6 +541,65 @@ def test_validate_embedded_credential_remote_needs_no_token(gitsync_enabled, git
     config.validate_gitsync()  # must not raise
 
 
+# --- Committer identity: fail closed (spec: git-committer-identity-check) -------
+
+def _isolate_git_identity(vault, monkeypatch):
+    """Reproduce a vault with no resolvable committer identity.
+
+    Points global/system config at /dev/null and clears the ``GIT_*`` / ``EMAIL``
+    env git would auto-detect from, then sets ``user.useConfigOnly`` so git
+    refuses to invent a ``user@host`` identity from the gecos/hostname -- the
+    behaviour a stripped container has, but which a dev host with a gecos fallback
+    does not, so without it the failure path could not be exercised here.
+    """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+    for var in (
+        "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL",
+        "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL",
+        "EMAIL",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    _git(vault, "config", "user.useConfigOnly", "true")
+
+
+def test_validate_accepts_env_committer_identity(gitsync_enabled, git_vault_dir, monkeypatch):
+    """The configured VAULT_GIT_GIT_AUTHOR_* identity passes even with no host identity."""
+    _isolate_git_identity(git_vault_dir, monkeypatch)
+    monkeypatch.setattr(config, "VAULT_GIT_GIT_AUTHOR_NAME", "Vault Bot")
+    monkeypatch.setattr(config, "VAULT_GIT_GIT_AUTHOR_EMAIL", "bot@example.com")
+    config.validate_gitsync()  # must not raise
+
+
+def test_validate_accepts_host_committer_identity(gitsync_enabled, git_vault_dir, monkeypatch):
+    """A host-resolved identity (here local repo config) passes with no env identity set."""
+    _isolate_git_identity(git_vault_dir, monkeypatch)
+    monkeypatch.setattr(config, "VAULT_GIT_GIT_AUTHOR_NAME", "")
+    monkeypatch.setattr(config, "VAULT_GIT_GIT_AUTHOR_EMAIL", "")
+    _git(git_vault_dir, "config", "user.name", "Host User")
+    _git(git_vault_dir, "config", "user.email", "host@example.com")
+    config.validate_gitsync()  # must not raise
+
+
+def test_validate_rejects_unresolvable_committer_identity(gitsync_enabled, git_vault_dir, monkeypatch):
+    """Neither env nor host identity resolvable fails closed, naming the remedy."""
+    _isolate_git_identity(git_vault_dir, monkeypatch)
+    monkeypatch.setattr(config, "VAULT_GIT_GIT_AUTHOR_NAME", "")
+    monkeypatch.setattr(config, "VAULT_GIT_GIT_AUTHOR_EMAIL", "")
+
+    with pytest.raises(ValueError, match="VAULT_GIT_GIT_AUTHOR_NAME") as exc:
+        config.validate_gitsync()
+    assert "VAULT_GIT_GIT_AUTHOR_EMAIL" in str(exc.value)
+
+
+def test_validate_skips_identity_check_when_disabled(gitsync_disabled, git_vault_dir, monkeypatch):
+    """Disabled extension performs no identity check, even with no resolvable identity."""
+    _isolate_git_identity(git_vault_dir, monkeypatch)
+    monkeypatch.setattr(config, "VAULT_GIT_GIT_AUTHOR_NAME", "")
+    monkeypatch.setattr(config, "VAULT_GIT_GIT_AUTHOR_EMAIL", "")
+    config.validate_gitsync()  # must not raise
+
+
 # --- GitOps credential-helper wiring (spec: git-credential-helper) --------------
 
 def _capture_git_calls(monkeypatch):
