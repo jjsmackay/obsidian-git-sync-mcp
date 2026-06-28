@@ -65,3 +65,53 @@ against the persisted volume, and the long-running command the service uses.
 - **THEN** the commands shown are the ones `ob` actually provides (login + sync
   setup) and write into the persisted config volume
 
+### Requirement: Idle sidecar auto-starts sync once bootstrapped
+
+When the sidecar starts un-bootstrapped (no config in the persisted config dir) and no explicit command is given, the entry point SHALL print the bootstrap instructions once and then poll for config rather than idling forever. As soon
+as the config dir becomes non-empty — i.e. an operator has run the explicit
+`bootstrap` against the running container — the entry point SHALL start
+continuous sync itself (`ob sync --path "$VAULT_PATH" --continuous`) without a
+manual container restart. The poll interval SHALL default to a few seconds and
+SHALL be overridable via an environment variable. The entry point SHALL NOT
+auto-run bootstrap: it only auto-starts sync once config exists, preserving the
+explicit-only bootstrap contract (a detected TTY must not trigger an interactive
+login). The existing branches — explicit `bootstrap` arg / `BOOTSTRAP` env,
+explicit passthrough command, and already-bootstrapped → continuous sync — SHALL
+be unchanged.
+
+#### Scenario: Idle entry point begins syncing after bootstrap without a restart
+
+- **WHEN** the sidecar starts with no config and no explicit command, an operator
+  then runs the explicit `bootstrap` against the running container, and the config
+  dir becomes non-empty
+- **THEN** the entry point detects the config on its next poll and execs
+  `ob sync --path "$VAULT_PATH" --continuous`, with no manual container restart
+
+#### Scenario: Instructions are printed once, then the loop idles quietly
+
+- **WHEN** the sidecar starts un-bootstrapped
+- **THEN** the bootstrap instructions are printed a single time
+- **AND** the entry point sleeps the poll interval between `is_bootstrapped`
+  checks rather than executing `sleep infinity`
+
+#### Scenario: Poll interval is overridable
+
+- **WHEN** the poll-interval environment variable is set
+- **THEN** the entry point waits that interval between config checks
+- **AND** when it is unset the entry point uses its built-in default of a few
+  seconds
+
+#### Scenario: Bootstrap is never auto-run
+
+- **WHEN** the sidecar is idle and un-bootstrapped, even with a TTY attached
+- **THEN** the entry point only ever auto-starts sync after config appears
+- **AND** it never invokes `bootstrap` itself
+
+#### Scenario: Existing start branches are preserved
+
+- **WHEN** a `bootstrap` arg / `BOOTSTRAP` env, an explicit passthrough command,
+  or an already-populated config dir is present at start
+- **THEN** the entry point behaves exactly as before — interactive bootstrap, the
+  verbatim command, or continuous sync respectively — without entering the poll
+  loop
+

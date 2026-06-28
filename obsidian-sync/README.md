@@ -33,7 +33,7 @@ run on start:
 |---|---|
 | `bootstrap` arg / `BOOTSTRAP=1` | runs the interactive bootstrap |
 | Already bootstrapped | `ob sync --path $VAULT_PATH --continuous` (normal) |
-| Not bootstrapped | prints instructions and idles — no crash-loop |
+| Not bootstrapped | prints instructions, then polls for config — no crash-loop. Once you bootstrap, continuous sync auto-starts (no restart). |
 
 Bootstrap is always **explicit** (the entry point never auto-starts it on a
 detected TTY — compose's `tty: true` would make it hang at the login prompt with
@@ -59,8 +59,8 @@ directly (the entry point passes an explicit command through verbatim), e.g.
 
 ## Run the sidecar
 
-Once `config` is populated, start (or restart) the sidecar — the entry point
-detects the config and runs continuous sync:
+Start the sidecar — the entry point detects existing config and runs continuous
+sync, or idles and polls until you bootstrap:
 
 ```bash
 docker compose --profile obsidian up -d
@@ -77,11 +77,11 @@ headless start idles with instructions (and reports unhealthy via the image
 HEALTHCHECK) rather than crash-looping; after a successful bootstrap it stays up
 and keeps the vault in step with Obsidian Sync.
 
-> **The entry point decides only at container start.** If you bootstrap a *running*
-> idle container with `docker exec`, you must then **restart it** to leave the idle
-> state and begin syncing. A `restart`/recreate works; note that an orchestrator
-> "redeploy" that sees no config change may *not* recreate the container — restart
-> it explicitly (e.g. `docker restart <container>`).
+> **Bootstrapping a running idle container auto-starts sync — no restart.** The
+> idle entry point polls `CONFIG_DIR` every `SYNC_POLL_INTERVAL` seconds (default
+> `5`); as soon as `docker exec … bootstrap` writes the config, the next poll
+> picks it up and starts continuous sync in place. Set `SYNC_POLL_INTERVAL` to
+> tune the cadence. (An explicit restart still works and is harmless.)
 
 ## Re-bootstrap (switch account or redo)
 
