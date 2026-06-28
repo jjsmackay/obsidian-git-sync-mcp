@@ -43,16 +43,21 @@ services:
   # Optional Obsidian Headless Sync sidecar. Opt-in via the `obsidian` profile:
   #   docker compose up -d                      # mcp only
   #   docker compose --profile obsidian up -d   # mcp + obsidian-sync
-  # Requires a one-time interactive bootstrap (ob login + ob sync-setup) into the
-  # named state volume before it can sync -- see obsidian-sync/README.md.
+  # Needs a one-time interactive bootstrap before it can sync. The image entry
+  # point handles the run decision: once bootstrapped it runs continuous sync;
+  # if not, a headless start idles with instructions (no crash-loop) so you can:
+  #   docker compose --profile obsidian run --rm obsidian-sync bootstrap
+  #   # or, against a running container:  docker exec -it <container> bootstrap
+  # See obsidian-sync/README.md.
   obsidian-sync:
     profiles: ["obsidian"]
     build: ./obsidian-sync
     restart: unless-stopped
 
-    # Long-running continuous sync of the shared vault working tree. The path
-    # must match the vault mount below (VAULT_PATH, default /vault).
-    command: ["ob", "sync", "--path", "${VAULT_PATH:-/vault}", "--continuous"]
+    # The entry point reads VAULT_PATH (default /vault) and runs continuous sync
+    # of the shared vault working tree. Must match the vault mount below.
+    environment:
+      - "VAULT_PATH=${VAULT_PATH:-/vault}"
 
     volumes:
       # SAME vault working tree the mcp service mounts. Device edits synced down

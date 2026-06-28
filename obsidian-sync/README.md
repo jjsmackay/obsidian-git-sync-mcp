@@ -22,62 +22,58 @@ The sidecar is **opt-in** via the Compose `obsidian` profile. A plain
 
 > **Login requires a real Obsidian account** (email/password, plus MFA if your
 > account has it, and your end-to-end encryption password). This is **not**
-> automated here — an operator runs it once. The credentials and sync state are
-> written into the `config` named volume and reused on every
-> subsequent start; nothing is baked into the image.
+> automated — an operator runs it once. The credentials and sync state are
+> written into the `config` named volume and reused on every subsequent start;
+> nothing is baked into the image.
 
-Run from the repo root (with `.env` populated as for the `mcp` service). Each
-`docker compose run` uses the sidecar's build + volume mounts, so writes land in
-the named volume.
+The image carries a `bootstrap` command and an entry point that decides what to
+run on start:
 
-1. **Log in to your Obsidian account.** Omit flags to be prompted interactively:
+| On start | Behaviour |
+|---|---|
+| Already bootstrapped | `ob sync --path $VAULT_PATH --continuous` (normal) |
+| Not bootstrapped, **TTY** attached | runs `bootstrap` interactively |
+| Not bootstrapped, **no TTY** (`up -d`) | prints instructions and idles — no crash-loop |
 
-   ```bash
-   docker compose run --rm obsidian-sync ob login
-   # or non-interactively:
-   # docker compose run --rm obsidian-sync ob login --email you@example.com --password '...' --mfa 123456
-   ```
+So bootstrap is a single interactive command, with the volumes already mounted.
 
-2. **(Optional) list your remote vaults** to get the vault id/name:
+**Against a running (idle) sidecar** — the common case after `up -d`:
 
-   ```bash
-   docker compose run --rm obsidian-sync ob sync-list-remote
-   ```
+```bash
+docker exec -it <container> bootstrap     # e.g. <stack>-sync
+```
 
-3. **Set up sync** from the mounted vault path to the chosen remote vault. The
-   `--password` here is your **end-to-end encryption** password:
+**Or as a one-off** before the sidecar is up:
 
-   ```bash
-   docker compose run --rm obsidian-sync \
-     ob sync-setup --vault "<remote-vault-id-or-name>" --path /vault \
-                   --password '<e2e-encryption-password>' --device-name headless
-   ```
+```bash
+docker compose --profile obsidian run --rm obsidian-sync bootstrap
+```
 
-   (`/vault` is `VAULT_PATH`; if you changed it, use that value.)
-
-4. **(Optional) check status:**
-
-   ```bash
-   docker compose run --rm obsidian-sync ob sync-status --path /vault
-   ```
+`bootstrap` walks you through `ob login` → `ob sync-list-remote` (pick the vault
+id/name) → `ob sync-setup` (prompts for the e2e password, hidden) → a status
+check. You can also force it with `BOOTSTRAP=1`, or run any `ob` subcommand
+directly (the entry point passes an explicit command through verbatim), e.g.
+`docker compose run --rm obsidian-sync ob sync-status --path /vault`.
 
 ## Run the sidecar
 
-Once the bootstrap has populated `config`:
+Once `config` is populated, start (or restart) the sidecar — the entry point
+detects the config and runs continuous sync:
 
 ```bash
 docker compose --profile obsidian up -d
 ```
 
-The service's default command is the long-running continuous sync:
+Effective command once bootstrapped:
 
 ```
 ob sync --path /vault --continuous
 ```
 
-`restart: unless-stopped` keeps it running. Until the bootstrap is done it will
-exit early reporting "No account logged in"; after a successful bootstrap it
-stays up and keeps the vault in step with Obsidian Sync.
+`restart: unless-stopped` keeps it running. Until the bootstrap is done a
+headless start idles with instructions (and reports unhealthy via the image
+HEALTHCHECK) rather than crash-looping; after a successful bootstrap it stays up
+and keeps the vault in step with Obsidian Sync.
 
 ## `ob` command reference (captured from `obsidian-headless@0.0.12`)
 

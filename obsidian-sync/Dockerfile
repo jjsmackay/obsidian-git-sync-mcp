@@ -31,6 +31,13 @@ RUN npm install -g obsidian-headless@0.0.12 \
 # HOME=/home/ob the config dir is /home/ob/.config/obsidian-headless
 # (credentials + per-vault state.db live there). The compose file mounts a named
 # volume at exactly that path.
+# Install the entry point + bootstrap scripts (root-owned, executable) before
+# dropping privileges. The entry point decides whether to sync, bootstrap, or
+# idle-and-instruct; `bootstrap` is the interactive one-time setup. See each
+# script's header and obsidian-sync/README.md.
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint
+COPY --chmod=0755 bootstrap.sh /usr/local/bin/bootstrap
+
 RUN useradd --create-home --uid 10001 ob
 ENV HOME=/home/ob
 USER ob
@@ -43,10 +50,13 @@ WORKDIR /home/ob
 # here makes the volume inherit `ob` ownership -- no host-side chown needed.
 RUN mkdir -p /home/ob/.config/obsidian-headless
 
-# Default command: long-running continuous sync of the shared vault working tree.
-# `ob sync --path <vault> --continuous` watches the vault and keeps it in step
-# with the remote. The vault path is the container mount point (VAULT_PATH,
-# default /vault); the compose service overrides this command with the resolved
-# path. Until a one-time `ob login` + `ob sync-setup` has populated the config
-# volume (see README), this exits early reporting "No account logged in".
-CMD ["ob", "sync", "--path", "/vault", "--continuous"]
+# Healthcheck doubles as a "bootstrapped?" signal: the config dir is non-empty
+# only after login/sync-setup, so an un-bootstrapped sidecar reports unhealthy
+# in `docker ps` / Komodo instead of looking fine while idle.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD [ -n "$(ls -A /home/ob/.config/obsidian-headless 2>/dev/null)" ]
+
+# The entry point owns the run decision (sync / bootstrap / idle); no CMD needed.
+# Until a one-time `bootstrap` (ob login + sync-setup) has populated the config
+# volume, a headless `up -d` start idles with instructions rather than looping.
+ENTRYPOINT ["entrypoint"]
