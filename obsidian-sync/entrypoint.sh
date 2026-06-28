@@ -6,10 +6,13 @@
 #   * any other explicit command          -> run it verbatim (escape hatch, e.g.
 #                                            `docker run ... <image> sh`)
 #   * no command, sync configured         -> ob sync --continuous (normal mode)
-#   * no command, NOT configured, TTY     -> interactive bootstrap
-#   * no command, NOT configured, no TTY  -> print instructions + idle, so a
+#   * no command, NOT configured          -> print instructions + idle, so a
 #                                            `up -d` deploy does NOT crash-loop and
 #                                            you can `docker exec -it ... bootstrap`
+#
+# Bootstrap is ALWAYS explicit (arg/env/exec). We deliberately do not auto-start
+# it on a detected TTY: compose's `tty: true` makes stdin a TTY even with nobody
+# attached, so auto-on-TTY would hang at the `ob login` prompt forever.
 #
 set -euo pipefail
 VAULT_PATH="${VAULT_PATH:-/vault}"
@@ -31,11 +34,6 @@ fi
 
 if is_bootstrapped; then
   exec ob sync --path "$VAULT_PATH" --continuous
-fi
-
-if [ -t 0 ]; then
-  echo ">> No Obsidian sync config found and a TTY is attached -- starting bootstrap."
-  exec bootstrap
 fi
 
 echo ">> obsidian-sync is NOT bootstrapped (no config in $CONFIG_DIR)."

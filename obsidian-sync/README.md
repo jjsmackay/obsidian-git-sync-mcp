@@ -31,11 +31,13 @@ run on start:
 
 | On start | Behaviour |
 |---|---|
+| `bootstrap` arg / `BOOTSTRAP=1` | runs the interactive bootstrap |
 | Already bootstrapped | `ob sync --path $VAULT_PATH --continuous` (normal) |
-| Not bootstrapped, **TTY** attached | runs `bootstrap` interactively |
-| Not bootstrapped, **no TTY** (`up -d`) | prints instructions and idles — no crash-loop |
+| Not bootstrapped | prints instructions and idles — no crash-loop |
 
-So bootstrap is a single interactive command, with the volumes already mounted.
+Bootstrap is always **explicit** (the entry point never auto-starts it on a
+detected TTY — compose's `tty: true` would make it hang at the login prompt with
+nobody attached). It's a single command, with the volumes already mounted.
 
 **Against a running (idle) sidecar** — the common case after `up -d`:
 
