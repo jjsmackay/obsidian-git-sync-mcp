@@ -62,10 +62,10 @@ services:
       # `ob`'s config + sync state (credentials, per-vault state.db) on a named
       # volume so they survive restarts. Path is `ob`'s actual config dir for the
       # image's HOME=/home/ob: $HOME/.config/obsidian-headless.
-      - "obsidian_sync_state:/home/ob/.config/obsidian-headless"
+      - "config:/home/ob/.config/obsidian-headless"
 
 # Named volumes.
 volumes:
   # Persists the obsidian-sync sidecar's `ob` config + sync state across
   # restarts. Populated by the one-time bootstrap (see obsidian-sync/README.md).
-  obsidian_sync_state:
+  config:

@@ -36,6 +36,13 @@ ENV HOME=/home/ob
 USER ob
 WORKDIR /home/ob
 
+# Pre-create the config dir (as `ob`, so it is owned by uid 10001) BEFORE the
+# named volume is mounted here. Docker copies an existing mount-target dir's
+# ownership into a fresh named volume on first use; without this the volume
+# mounts root-owned and `ob` cannot write its credentials/state. Creating it
+# here makes the volume inherit `ob` ownership -- no host-side chown needed.
+RUN mkdir -p /home/ob/.config/obsidian-headless
+
 # Default command: long-running continuous sync of the shared vault working tree.
 # `ob sync --path <vault> --continuous` watches the vault and keeps it in step
 # with the remote. The vault path is the container mount point (VAULT_PATH,

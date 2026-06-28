@@ -14,7 +14,7 @@ The sidecar is **opt-in** via the Compose `obsidian` profile. A plain
   so a device edit synced down by `ob` lands on disk and the git-sync worker's
   sweep commits it.
 - It persists `ob`'s config + sync state on the named volume
-  `obsidian_sync_state`, mounted at `ob`'s config dir
+  `config`, mounted at `ob`'s config dir
   **`/home/ob/.config/obsidian-headless`** (credentials and the per-vault
   `state.db` live there).
 
@@ -23,7 +23,7 @@ The sidecar is **opt-in** via the Compose `obsidian` profile. A plain
 > **Login requires a real Obsidian account** (email/password, plus MFA if your
 > account has it, and your end-to-end encryption password). This is **not**
 > automated here — an operator runs it once. The credentials and sync state are
-> written into the `obsidian_sync_state` named volume and reused on every
+> written into the `config` named volume and reused on every
 > subsequent start; nothing is baked into the image.
 
 Run from the repo root (with `.env` populated as for the `mcp` service). Each
@@ -63,7 +63,7 @@ the named volume.
 
 ## Run the sidecar
 
-Once the bootstrap has populated `obsidian_sync_state`:
+Once the bootstrap has populated `config`:
 
 ```bash
 docker compose --profile obsidian up -d
