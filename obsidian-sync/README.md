@@ -77,6 +77,30 @@ headless start idles with instructions (and reports unhealthy via the image
 HEALTHCHECK) rather than crash-looping; after a successful bootstrap it stays up
 and keeps the vault in step with Obsidian Sync.
 
+> **The entry point decides only at container start.** If you bootstrap a *running*
+> idle container with `docker exec`, you must then **restart it** to leave the idle
+> state and begin syncing. A `restart`/recreate works; note that an orchestrator
+> "redeploy" that sees no config change may *not* recreate the container — restart
+> it explicitly (e.g. `docker restart <container>`).
+
+## Re-bootstrap (switch account or redo)
+
+The config volume is sticky, so the entry point will keep using whatever account
+is already there. To start over — wrong account, or rotating accounts — clear the
+config and bootstrap again:
+
+```bash
+docker stop <container>                                   # free the config volume
+docker run --rm -v <stack>_config:/c alpine \
+  sh -c 'rm -rf /c/* /c/.[!.]*'                            # wipe credentials + sync state
+docker compose --profile obsidian run --rm obsidian-sync bootstrap   # fresh login
+docker start <container>                                   # back to continuous sync
+```
+
+(A one-off `run` is used for the bootstrap because the sidecar is stopped — don't
+`exec` into a stopped container. `ob logout` alone won't necessarily clear a
+configured vault's sync link, so a clean wipe is the reliable reset.)
+
 ## `ob` command reference (captured from `obsidian-headless@0.0.12`)
 
 ```

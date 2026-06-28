@@ -86,7 +86,13 @@ git clone <your-vault-remote> ./vault   # match VAULT_HOST_PATH
   git -C ./vault remote set-url origin git@github.com:<org>/<repo>.git
   ```
 
-**3. Enable git sync** in `.env` and (re)deploy:
+**3. Give the worker a commit identity.** Git refuses to commit without one, so
+without an identity *every* commit fails (you'll see `git-worker sweep commit
+failed (rc=128)` and nothing is committed or pushed). Either set
+`VAULT_GIT_GIT_AUTHOR_NAME` + `VAULT_GIT_GIT_AUTHOR_EMAIL` in `.env`, or configure
+`user.name`/`user.email` in the vault's own git config.
+
+**4. Enable git sync** in `.env` and (re)deploy:
 
 ```bash
 VAULT_GIT_ENABLED=true
@@ -97,9 +103,28 @@ VAULT_GIT_REMOTE=origin     # or leave empty for commit-only (local backup, neve
 docker compose up -d
 ```
 
-> **Ordering with the obsidian-sync sidecar:** bootstrap the git tree *first*
-> (it establishes the working tree + remote), then run the one-time `ob` bootstrap
+> **Ordering with the obsidian-sync sidecar:** bootstrap the git tree *first* (it
+> establishes the working tree + remote), then run the one-time `ob` bootstrap
 > against the same `/vault` (see [`obsidian-sync/README.md`](obsidian-sync/README.md)).
+> And set the **push credential before** the sidecar first syncs content down —
+> otherwise the initial (large) push fails and commits pile up retrying locally.
+
+### Named volumes (orchestrators)
+
+The steps above assume `VAULT_HOST_PATH` is a host directory you clone into. If
+instead the vault is a **Docker named volume** (e.g. a Komodo/Compose stack with
+`volumes: [vault]`), you can't clone on the host — and a fresh named volume mounts
+**root-owned**, so the container's non-root user (uid 10001) can't commit. Seed it
+with a one-off container that clones *and* fixes ownership:
+
+```bash
+docker run --rm -v <stack>_vault:/vault <mcp-image> \
+  sh -c 'git clone https://x-access-token:<TOKEN>@github.com/<org>/<repo>.git /vault \
+         && chown -R 10001:10001 /vault'
+```
+
+Then enable git sync and deploy as above. (The `obsidian-sync` image avoids this for
+its own `config` volume by pre-creating the dir — the vault volume has no such fix.)
 
 ## Configuration
 
