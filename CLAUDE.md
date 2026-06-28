@@ -11,6 +11,12 @@ them here.
 
 ## Change workflow
 - Spec-driven via **OpenSpec**: propose changes with `/opsx:propose`, not ad-hoc edits.
+- Full cycle: `/opsx:propose` → commit → `/opsx:apply` → `/opsx:archive` → commit.
+  `/opsx:propose` STOPS at "ready for apply" (generates artifacts, doesn't apply/archive) — continue explicitly.
+- Per change, two commits **directly on `main`** (not a branch): `docs(openspec): propose <slug>`,
+  then the impl commit (`feat(...)`/`docs(...)`) that folds in `opsx:archive` (spec sync + move to `openspec/changes/archive/`).
+- `openspec archive` stamps the archive dir with the host clock (often a day off) — rename the dir to the real date to match siblings.
+- Validator quirk: only a requirement's **first line** is checked for SHALL/MUST; no backticks in requirement headers.
 - `.claude/` is gitignored; regenerate slash commands with `openspec init --tools claude`.
 
 ## Gotchas
