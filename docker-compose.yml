@@ -10,6 +10,14 @@ services:
     env_file: .env
     restart: unless-stopped
 
+    # OAUTH_CLIENTS_PATH points the upstream server's DCR client registry at the
+    # dedicated oauth_registry volume below (mounted at /data), so registered MCP
+    # clients survive a redeploy instead of being rejected with invalid_client.
+    # It must live here, NOT under VAULT_PATH: the git-sync worker commits and
+    # pushes the vault tree, and this file holds per-client secrets.
+    environment:
+      - "OAUTH_CLIENTS_PATH=/data/oauth_clients.json"
+
     # Publish ONLY the MCP port. Nothing else is exposed to the host.
     ports:
       - "${VAULT_MCP_PORT:-8420}:${VAULT_MCP_PORT:-8420}"
@@ -21,6 +29,12 @@ services:
       # "Git repo bootstrap" section in README.md (the container refuses to boot if
       # VAULT_GIT_ENABLED=true and this is not a git working tree with the remote).
       - "${VAULT_HOST_PATH:-./vault}:${VAULT_PATH:-/vault}"
+
+      # Dedicated volume for the OAuth DCR client registry (OAUTH_CLIENTS_PATH
+      # above). Kept OFF the vault tree so the registry's per-client secrets are
+      # never swept into a commit and pushed. The image pre-creates /data as uid
+      # 10001 so this fresh (root-owned) volume is writable by the server user.
+      - "oauth_registry:/data"
 
       # Pushing needs a credential. Do NOT bake one into the image. Two options:
       #   1. Token-bearing https remote configured in the vault itself, e.g.
@@ -74,3 +88,7 @@ volumes:
   # Persists the obsidian-sync sidecar's `ob` config + sync state across
   # restarts. Populated by the one-time bootstrap (see obsidian-sync/README.md).
   config:
+  # Persists the mcp server's OAuth DCR client registry (oauth_clients.json)
+  # across redeploys, so already-connected MCP clients aren't wiped and rejected
+  # with invalid_client. Separate from the vault volume by design (see mcp).
+  oauth_registry:

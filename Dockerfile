@@ -24,6 +24,15 @@ RUN uv pip install --system .
 
 # Drop root: nothing here needs it, and the vault is a mounted volume.
 RUN useradd --create-home --uid 10001 appuser
+
+# Pre-create the OAuth-registry mount point owned by uid 10001. A fresh Docker
+# named volume mounts root-owned; the server writes oauth_clients.json as uid
+# 10001 with os.open(..., 0o600), which fails *silently* (best-effort save) on a
+# root-owned dir — so the registry would never persist and redeploys would keep
+# breaking connected clients (invalid_client). Baking the ownership into the
+# image makes a fresh volume inherit it. Mirrors the sidecar's config-dir fix.
+RUN install -d -o 10001 -g 10001 /data
+
 USER appuser
 
 # The MCP transport port (upstream default 8420; overridable via VAULT_MCP_PORT).
