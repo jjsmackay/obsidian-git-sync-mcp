@@ -92,3 +92,9 @@ volumes:
   # across redeploys, so already-connected MCP clients aren't wiped and rejected
   # with invalid_client. Separate from the vault volume by design (see mcp).
   oauth_registry:
+  # Only used if VAULT_HOST_PATH is set to a bare name (no "/") instead of a
+  # host path -- lets an orchestrator that manages its own volumes (e.g.
+  # Komodo) mount the vault as a Compose-managed named volume. See "Named
+  # volumes (orchestrators)" in README.md. Unused (and never created) with the
+  # default host-bind-mount VAULT_HOST_PATH.
+  vault:

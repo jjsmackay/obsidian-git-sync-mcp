@@ -142,6 +142,10 @@ token does not persist in the volume's `.git/config`; set `VAULT_GIT_TOKEN` for
 the ongoing pushes. Then enable git sync and deploy as above. (The `obsidian-sync` image avoids this for
 its own `config` volume by pre-creating the dir — the vault volume has no such fix.)
 
+`docker-compose.yml` declares this as the `vault` named volume; set
+`VAULT_HOST_PATH` to a bare name (no `/`, e.g. `vault`) to select it instead of
+a host path.
+
 ## Configuration
 
 ### Upstream server (`VAULT_*`)
