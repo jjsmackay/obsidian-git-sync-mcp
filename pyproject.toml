@@ -5,10 +5,14 @@ description = "Git-sync extension for the obsidian-web-mcp server: commits and s
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    # Depend on the upstream server via its fork branch: the write-listener seam
-    # the later change-trigger change needs lives on feat/write-listener (PR #62).
+    # Depend on the upstream server via a commit pin on the fork's
+    # feat/write-listener branch: it carries the write-listener seam the
+    # change-trigger needs (PR #62), plus the OAuth protected-resource subpath
+    # fix (resource now includes VAULT_MCP_PATH, for strict RFC 9728 clients).
+    # Pinned to a SHA, not the branch, so builds are reproducible and the Docker
+    # layer cache re-resolves the dep on each bump.
     # TODO: repin to an upstream/PyPI release once PR #62 merges.
-    "obsidian-web-mcp @ git+https://github.com/jjsmackay/obsidian-web-mcp@feat/write-listener",
+    "obsidian-web-mcp @ git+https://github.com/jjsmackay/obsidian-web-mcp@35a25c446262491da34837234b58463b6a16ba15",
     # Formatting-preserving YAML round-trip for frontmatter stamping: preserves
     # users' quotes, key order, and comments, and (with a quote-strip post-process)
     # emits the Obsidian Linter's unquoted timestamp form so desktop and server
