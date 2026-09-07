@@ -15,9 +15,15 @@ dependencies = [
     # the fork persists only for the OAuth fix, which cannot move into the
     # extension because build_app() fails closed on an extension registering a
     # route under an auth-exempt prefix like /.well-known/*.
-    # TODO: repin to upstream once that OAuth fix is merged there. Upstream
-    # publishes no PyPI package, so the target is a commit pin, not a release.
-    "obsidian-web-mcp @ git+https://github.com/jjsmackay/obsidian-web-mcp@48ebdf0bae9fe4f225f32da0597e357412afba9b",
+    # 8fabcd4 = upstream cd88fdf + exactly two fork commits, rebased linear
+    # (2026-09-07): 7f17b1a the OAuth fix, 8fabcd4 the fork's own mcp<2 cap.
+    # A rebase rewrites SHAs, so re-pin after one -- the prior pin (cc91cd3)
+    # was left unreachable by any branch and is GC-eligible.
+    # TODO: repin to upstream once that OAuth fix is merged there (PR #75).
+    # Upstream publishes no PyPI package, so the target is a commit pin, not a
+    # release -- and it has merged nothing since 2026-06-26, so do not plan around
+    # this landing soon.
+    "obsidian-web-mcp @ git+https://github.com/jjsmackay/obsidian-web-mcp@8fabcd490d6ad19ee61d37bb3cdf32aee238f690",
     # Formatting-preserving YAML round-trip for frontmatter stamping: preserves
     # users' quotes, key order, and comments, and (with a quote-strip post-process)
     # emits the Obsidian Linter's unquoted timestamp form so desktop and server
@@ -38,19 +44,21 @@ obsidian-git-sync-mcp = "obsidian_git_sync.main:main"
 git-credential-obsidian-env = "obsidian_git_sync.credential_helper:main"
 
 # Bound the MCP SDK to the major line the upstream server can actually import.
-# Upstream declares ``mcp[cli]>=1.9.0`` -- a floor with no ceiling -- while its
 # server.py imports ``mcp.server.fastmcp.FastMCP``, a module SDK 2.0.0 deleted
 # (FastMCP was renamed MCPServer). The image installs UNLOCKED (.dockerignore
-# excludes uv.lock; the Dockerfile runs ``uv pip install --system .``), so with
-# no ceiling the build resolves 2.x and ships an image that dies on import.
+# excludes uv.lock; the Dockerfile runs ``uv pip install --system .``), so an
+# unbounded resolve ships an image that dies on import.
 #
 # A constraint, not a [project.dependencies] entry: this package imports no mcp
 # symbol -- its whole contact with upstream is obsidian_vault_mcp.{extensions,
 # write_events, server.serve, config} -- so declaring a direct dependency would
 # misstate the graph. A constraint bounds a transitive without claiming it.
 #
-# STOPGAP for an upstream metadata defect. REMOVE when upstream caps the SDK
-# itself (or migrates to 2.x) and the upstream pin is bumped past that commit.
+# REDUNDANT-BY-DESIGN as of the cc91cd3 pin, which caps the SDK itself. Kept
+# deliberately as a backstop: TRUE upstream (jimprosser) still declares
+# ``mcp[cli]>=1.9.0`` unbounded, so this survives a repin there before its cap
+# lands (see #74/#68, and issues #69/#71). REMOVE once the pin points at an
+# upstream revision that carries its own cap -- not merely at a fork that does.
 [tool.uv]
 constraint-dependencies = ["mcp<2"]
 

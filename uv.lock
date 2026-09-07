@@ -348,7 +348,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "obsidian-web-mcp", git = "https://github.com/jjsmackay/obsidian-web-mcp?rev=48ebdf0bae9fe4f225f32da0597e357412afba9b" },
+    { name = "obsidian-web-mcp", git = "https://github.com/jjsmackay/obsidian-web-mcp?rev=8fabcd490d6ad19ee61d37bb3cdf32aee238f690" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "ruamel-yaml" },
@@ -358,7 +358,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "obsidian-web-mcp"
 version = "0.2.0"
-source = { git = "https://github.com/jjsmackay/obsidian-web-mcp?rev=48ebdf0bae9fe4f225f32da0597e357412afba9b#48ebdf0bae9fe4f225f32da0597e357412afba9b" }
+source = { git = "https://github.com/jjsmackay/obsidian-web-mcp?rev=8fabcd490d6ad19ee61d37bb3cdf32aee238f690#8fabcd490d6ad19ee61d37bb3cdf32aee238f690" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
