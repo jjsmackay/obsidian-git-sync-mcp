@@ -164,6 +164,43 @@ them.
 | `VAULT_MCP_PUBLIC_URL` | — | Canonical public origin advertised in OAuth discovery and auth challenges. Empty = derive per request. |
 | `VAULT_OAUTH_*` | see `.env.example` | Optional OAuth (client id/secret, login gate, redirect URIs) for the Claude app browser integration. |
 
+### Additional extensions (`VAULT_MCP_EXTENSIONS`)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VAULT_MCP_EXTENSIONS` | _(empty)_ | Extra extensions to load alongside git-sync, comma-separated as `module.path:ClassName`. Empty = git-sync only. |
+
+Upstream's extension seam gives each extension its own entry point calling
+`serve([YourExtension()])`, with no way to run two. This variable is that
+composition point: the named extensions are appended **after**
+`GitSyncExtension` in a single `serve()` call, in declaration order, so
+git-sync's hooks always run first.
+
+> **Trust model — read this.** A declared extension is **fully-trusted,
+> in-process code** running with the server's full privileges: it can read the
+> bearer token and OAuth secrets from the environment, read/write the vault, and
+> mutate any route. This is **not a sandbox** — load only extensions you wrote or
+> trust, exactly as you would any dependency.
+
+Loading is **explicit opt-in**. An extension loads only if it is named here;
+there is no entry-point group, no installed-package scan, and no filesystem
+discovery, so nothing loads merely because it is installed. Installing a package
+is not consent to run it with those privileges.
+
+A bad entry — malformed, an unimportable module, a missing attribute, or a target
+that is not an `Extension` subclass — **fails closed at startup**, naming the
+offending entry. One bad entry rejects the whole list rather than loading half of
+it, so the server never runs missing an extension you asked for.
+
+To compose your own deployment without changing this repo, build on the published
+image:
+
+```dockerfile
+FROM ghcr.io/jjsmackay/obsidian-mcp:latest
+RUN pip install --no-cache-dir my-extension-package
+ENV VAULT_MCP_EXTENSIONS=my_pkg.extension:MyExtension
+```
+
 ### Git-sync extension (`VAULT_GIT_*`)
 
 Disabled by default. Set `VAULT_GIT_ENABLED` truthy to turn the extension

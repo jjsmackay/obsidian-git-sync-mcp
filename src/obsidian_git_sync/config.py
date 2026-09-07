@@ -1,5 +1,9 @@
 """Configuration for the git-sync extension, read from ``VAULT_GIT_*`` env vars.
 
+One exception: ``VAULT_MCP_EXTENSIONS`` (which extensions this package's entry
+point loads) is a server-host concern in the upstream namespace, not a git-sync
+setting. It lives here to keep every env read in one module; see its own comment.
+
 Mirrors the upstream ``obsidian_vault_mcp.config`` idiom: values are read as raw
 strings at module import via ``os.environ.get`` and parsed/validated lazily in a
 ``validate_*`` function that raises ``ValueError``. Keeping parsing in the validator
@@ -15,6 +19,7 @@ Variable names are provisional and reconciled with ``.env.example`` in the
 container-deployment change.
 """
 
+import importlib
 import os
 import subprocess
 from urllib.parse import urlsplit
@@ -98,6 +103,24 @@ VAULT_GIT_STAMP = os.environ.get("VAULT_GIT_STAMP", "")
 #
 #   VAULT_GIT_TOKEN -- the HTTPS push token, or "" for none (default "").
 VAULT_GIT_TOKEN = os.environ.get("VAULT_GIT_TOKEN", "")
+
+# Additional extensions the operator wants this entry point to load alongside
+# GitSyncExtension, as a comma-separated list of ``module.path:ClassName`` import
+# specs. EMPTY/unset = none, and then no import machinery runs at all.
+#
+# Deliberately in the upstream ``VAULT_MCP_*`` namespace rather than this package's
+# ``VAULT_GIT_*``: it configures the SERVER HOST (which extensions the process
+# runs), not git sync, and a git-prefixed name for "load an unrelated extension"
+# would mislead. This package defines the name until upstream defines it; if
+# upstream ever ships extension composition itself, this variable is deleted
+# rather than reconciled.
+#
+# Kept raw and resolved in extra_extensions() so a typo fails CLOSED at startup
+# rather than at import or, worse, boots a server missing the extension an
+# operator asked for.
+#
+#   VAULT_MCP_EXTENSIONS -- "pkg.mod:Class,other.mod:Class", or "" for none.
+VAULT_MCP_EXTENSIONS = os.environ.get("VAULT_MCP_EXTENSIONS", "")
 
 _TRUTHY = {"1", "true", "yes", "on"}
 _FALSEY = {"0", "false", "no", "off"}
@@ -202,6 +225,71 @@ def heartbeat_url() -> str:
     Call only after ``validate_gitsync()`` has accepted it.
     """
     return VAULT_GIT_HEARTBEAT_URL.strip()
+
+
+def _resolve_extension(spec: str):
+    """Resolve one ``module.path:ClassName`` spec to an ``Extension`` subclass.
+
+    Raises ``ValueError`` naming the offending spec for every rejection -- a
+    malformed spec, an unimportable module, a missing attribute, or a target that
+    is not an ``extensions.Extension`` subclass. Never returns a partial result:
+    the caller either gets a usable class or an error identifying what was wrong.
+    """
+    # Imported lazily to keep this module importable without the upstream server
+    # (the rest of config.py follows the same rule for VAULT_PATH).
+    from obsidian_vault_mcp.extensions import Extension
+
+    prefix = f"VAULT_MCP_EXTENSIONS entry {spec!r}"
+    # Strip each half up front: the caller only trimmed the whole entry, so
+    # "mod : Class" still needs normalising before it is validated.
+    module_path, separator, class_name = (part.strip() for part in spec.partition(":"))
+    if not separator or not module_path or not class_name:
+        raise ValueError(f"{prefix} is malformed: expected 'module.path:ClassName'")
+
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as e:
+        raise ValueError(f"{prefix} names a module that could not be imported: {e}")
+
+    try:
+        target = getattr(module, class_name)
+    except AttributeError:
+        raise ValueError(
+            f"{prefix} names {class_name!r}, which module {module_path!r} does not define"
+        )
+
+    if not (isinstance(target, type) and issubclass(target, Extension)):
+        raise ValueError(
+            f"{prefix} resolved to {target!r}, which is not a subclass of "
+            f"obsidian_vault_mcp.extensions.Extension"
+        )
+    return target
+
+
+def extra_extensions() -> list:
+    """Return the operator-declared additional extension classes, in order.
+
+    This IS the startup validation for ``VAULT_MCP_EXTENSIONS``: resolution
+    produces the classes the entry point needs and raises ``ValueError`` on any
+    bad entry, so there is no separate ``validate_*`` pass to run (one would
+    either re-import every declared module or discard its own result).
+
+    Empty when nothing is declared -- an unset, empty, whitespace-only, or
+    comma-only value imports nothing at all. Padding and a trailing or repeated
+    comma from a hand-edited env file are tolerated rather than rejected.
+
+    Resolution is ALL-OR-NOTHING: one bad entry raises and no class is returned,
+    because a server running without the extension an operator asked for is a
+    silently wrong deployment.
+
+    Independent of ``is_enabled()`` on purpose -- a declared extension must load
+    whether or not git sync itself is turned on.
+    """
+    return [
+        _resolve_extension(spec)
+        for spec in (raw.strip() for raw in VAULT_MCP_EXTENSIONS.split(","))
+        if spec
+    ]
 
 
 def validate_gitsync() -> None:
