@@ -11,7 +11,12 @@ dependencies = [
     # for strict RFC 9728 clients), and the re-baseline onto upstream. Pinned to a
     # SHA, not the branch, so builds are reproducible and the Docker layer cache
     # re-resolves the dep on each bump.
-    # TODO: repin to an upstream/PyPI release once the seam lands upstream.
+    # The seam itself HAS landed upstream (PR #62, merged 2026-06-22 as 81b6140);
+    # the fork persists only for the OAuth fix, which cannot move into the
+    # extension because build_app() fails closed on an extension registering a
+    # route under an auth-exempt prefix like /.well-known/*.
+    # TODO: repin to upstream once that OAuth fix is merged there. Upstream
+    # publishes no PyPI package, so the target is a commit pin, not a release.
     "obsidian-web-mcp @ git+https://github.com/jjsmackay/obsidian-web-mcp@48ebdf0bae9fe4f225f32da0597e357412afba9b",
     # Formatting-preserving YAML round-trip for frontmatter stamping: preserves
     # users' quotes, key order, and comments, and (with a quote-strip post-process)
@@ -32,11 +37,28 @@ obsidian-git-sync-mcp = "obsidian_git_sync.main:main"
 # value ``obsidian-env`` (git prefixes ``git-credential-``); see credential_helper.py.
 git-credential-obsidian-env = "obsidian_git_sync.credential_helper:main"
 
+# Bound the MCP SDK to the major line the upstream server can actually import.
+# Upstream declares ``mcp[cli]>=1.9.0`` -- a floor with no ceiling -- while its
+# server.py imports ``mcp.server.fastmcp.FastMCP``, a module SDK 2.0.0 deleted
+# (FastMCP was renamed MCPServer). The image installs UNLOCKED (.dockerignore
+# excludes uv.lock; the Dockerfile runs ``uv pip install --system .``), so with
+# no ceiling the build resolves 2.x and ships an image that dies on import.
+#
+# A constraint, not a [project.dependencies] entry: this package imports no mcp
+# symbol -- its whole contact with upstream is obsidian_vault_mcp.{extensions,
+# write_events, server.serve, config} -- so declaring a direct dependency would
+# misstate the graph. A constraint bounds a transitive without claiming it.
+#
+# STOPGAP for an upstream metadata defect. REMOVE when upstream caps the SDK
+# itself (or migrates to 2.x) and the upstream pin is bumped past that commit.
+[tool.uv]
+constraint-dependencies = ["mcp<2"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# The upstream dep is a direct git reference (until PR #62 merges); hatchling
+# The upstream dep is a direct git reference (see the pin above); hatchling
 # rejects direct references in project metadata unless explicitly allowed.
 [tool.hatch.metadata]
 allow-direct-references = true

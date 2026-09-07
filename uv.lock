@@ -8,6 +8,9 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'win32'",
 ]
 
+[manifest]
+constraints = [{ name = "mcp", specifier = "<2" }]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.4"
@@ -290,7 +293,7 @@ wheels = [
 
 [[package]]
 name = "mcp"
-version = "1.28.0"
+version = "1.29.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -308,9 +311,9 @@ dependencies = [
     { name = "typing-inspection" },
     { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c1/ee/94c6c50ffc5b5cf4737052275d11b57367f32d1a8516e31dcd60591b3916/mcp-1.28.0.tar.gz", hash = "sha256:559d3f9943674cafbe5744c5d3794f3237e8b47f9bbc58e20c0fad680d8487c2", size = 636040, upload-time = "2026-06-16T21:37:17.996Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/48/0bb26fdfe7ac16875f534a101ce2405eae192bdef37e7451f2f4507c13ec/mcp-1.29.1.tar.gz", hash = "sha256:1967ba4c315f7a375146209949f45950d18b0efd2f913d7cf3400bc723ee5f04", size = 646823, upload-time = "2026-08-24T18:30:41.161Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/e1/4c1dc1fbb688641a712d34650c3d58bbbdcb314ddb75bc5817bbf33515a4/mcp-1.28.0-py3-none-any.whl", hash = "sha256:9c1e7cf3a9125557e418ecd4fed8e9adddce81b0dfdae4d6601d700f5beb71a4", size = 221959, upload-time = "2026-06-16T21:37:16.579Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/04/d6b4fb82eefe9e81807aabca1ac98f460ae0883974b83a997aaa20c52545/mcp-1.29.1-py3-none-any.whl", hash = "sha256:b6310eeb59153300c4ab8b9aec4c52f4819a2d6a8e429eb43d908bed7c783648", size = 224653, upload-time = "2026-08-24T18:30:39.573Z" },
 ]
 
 [package.optional-dependencies]
@@ -345,7 +348,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "obsidian-web-mcp", git = "https://github.com/jjsmackay/obsidian-web-mcp?rev=feat%2Fwrite-listener" },
+    { name = "obsidian-web-mcp", git = "https://github.com/jjsmackay/obsidian-web-mcp?rev=48ebdf0bae9fe4f225f32da0597e357412afba9b" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "ruamel-yaml" },
@@ -355,11 +358,12 @@ provides-extras = ["dev"]
 [[package]]
 name = "obsidian-web-mcp"
 version = "0.2.0"
-source = { git = "https://github.com/jjsmackay/obsidian-web-mcp?rev=feat%2Fwrite-listener#e63ec8daf14c866b0871cbfce85ba591c7a21f71" }
+source = { git = "https://github.com/jjsmackay/obsidian-web-mcp?rev=48ebdf0bae9fe4f225f32da0597e357412afba9b#48ebdf0bae9fe4f225f32da0597e357412afba9b" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
     { name = "python-frontmatter" },
+    { name = "ruamel-yaml" },
     { name = "watchdog" },
 ]
 
