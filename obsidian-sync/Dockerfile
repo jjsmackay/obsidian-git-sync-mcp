@@ -32,12 +32,14 @@ RUN npm install -g obsidian-headless@0.0.14 \
 # HOME=/home/ob the config dir is /home/ob/.config/obsidian-headless
 # (credentials + per-vault state.db live there). The compose file mounts a named
 # volume at exactly that path.
-# Install the entry point + bootstrap scripts (root-owned, executable) before
-# dropping privileges. The entry point decides whether to sync, bootstrap, or
-# idle-and-instruct; `bootstrap` is the interactive one-time setup. See each
-# script's header and obsidian-sync/README.md.
+# Install the entry point + bootstrap + healthcheck scripts (root-owned,
+# executable) before dropping privileges. The entry point decides whether to
+# sync, bootstrap, or idle-and-instruct; `bootstrap` is the interactive one-time
+# setup; `healthcheck` backs the HEALTHCHECK below. See each script's header and
+# obsidian-sync/README.md.
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint
 COPY --chmod=0755 bootstrap.sh /usr/local/bin/bootstrap
+COPY --chmod=0755 healthcheck.sh /usr/local/bin/healthcheck
 
 RUN useradd --create-home --uid 10001 ob
 ENV HOME=/home/ob
@@ -51,11 +53,17 @@ WORKDIR /home/ob
 # here makes the volume inherit `ob` ownership -- no host-side chown needed.
 RUN mkdir -p /home/ob/.config/obsidian-headless
 
-# Healthcheck doubles as a "bootstrapped?" signal: the config dir is non-empty
-# only after login/sync-setup, so an un-bootstrapped sidecar reports unhealthy
-# in `docker ps` / Komodo instead of looking fine while idle.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD [ -n "$(ls -A /home/ob/.config/obsidian-headless 2>/dev/null)" ]
+# Healthcheck asserts that sync is CURRENTLY progressing, via the freshness of
+# `ob`'s sync.log -- see healthcheck.sh's header for the signal and the
+# alternatives it rejects. The case it exists to catch is a wedged-but-running
+# `ob`: the process stays alive, so neither a liveness probe nor
+# `restart: unless-stopped` can see the failure. An un-bootstrapped sidecar
+# still reports unhealthy (no config means no sync.log), preserving what the
+# previous config-dir check signalled. Window: SYNC_STALE_AFTER, default 180s.
+# The start period covers boot plus the first log write, not a full backlog --
+# the log is written continuously while files move.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD healthcheck
 
 # The entry point owns the run decision (sync / bootstrap / idle); no CMD needed.
 # Until a one-time `bootstrap` (ob login + sync-setup) has populated the config

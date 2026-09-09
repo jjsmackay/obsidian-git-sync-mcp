@@ -83,6 +83,52 @@ and keeps the vault in step with Obsidian Sync.
 > picks it up and starts continuous sync in place. Set `SYNC_POLL_INTERVAL` to
 > tune the cadence. (An explicit restart still works and is harmless.)
 
+## Health
+
+The image `HEALTHCHECK` asserts that sync is **currently progressing**, not just
+that the sidecar was set up. In continuous mode `ob` appends a `Fully synced`
+line to its per-vault `sync.log` every 30s, so the check reads that file's mtime
+(never its contents) and fails once it is older than `SYNC_STALE_AFTER` seconds:
+
+| | |
+|---|---|
+| Signal | newest `$CONFIG_DIR/sync/*/sync.log` mtime |
+| Window | `SYNC_STALE_AFTER`, default `180` (six missed 30s beats) |
+| Cadence | `--interval=30s --retries=3`, so unhealthy lands ~180-270s after the last write |
+| Start period | `120s`, covering boot and the first log write |
+
+An un-bootstrapped sidecar has no `sync.log` and so still reports unhealthy,
+which is what the previous config-directory check signalled. A one-off
+`bootstrap` or passthrough (`… run --rm obsidian-sync sh`) container runs no
+sync session and will also read unhealthy — expected, and harmless on a
+short-lived container.
+
+Check it directly:
+
+```bash
+docker exec <container> healthcheck          # prints the age, exits 0 / 1
+docker inspect --format '{{json .State.Health}}' <container>
+```
+
+### Why not a liveness probe
+
+This check exists because of a real three-day outage. `ob` lost its connection,
+logged `Connecting...`, and never reconnected — while staying **alive and
+sleeping with zero open sockets**. Everything that looked at the process or its
+config kept reporting healthy, and `restart: unless-stopped` never fired,
+because the policy acts on a process that *exits* and this one never did. The
+local file watcher carried on recording changes the whole time, so the vault
+quietly diverged from every device.
+
+The `obsidian-headless` pin was raised to `0.0.14` to fix that specific wedge
+(upstream `0.0.13`: "Fix WebSocket sometimes can get stuck in CONNECTING state
+indefinitely"), but the missing *signal* is the durable problem, hence this
+check.
+
+> **Detection is not recovery.** An unhealthy container is not restarted by
+> Docker or Compose. To act on this automatically you need an orchestrator
+> watching container health, Swarm, or an external supervisor.
+
 ## Re-bootstrap (switch account or redo)
 
 The config volume is sticky, so the entry point keeps using whatever account is

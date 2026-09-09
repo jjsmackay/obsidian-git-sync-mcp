@@ -244,16 +244,27 @@ Do not expose the published port directly to the internet.
 
 ## Monitoring
 
-Three independent layers, each answering a different question:
+Four independent layers, each answering a different question:
 
-- **Container healthcheck** — a dependency-free TCP connect to the MCP port,
+- **mcp container healthcheck** — a dependency-free TCP connect to the MCP port,
   baked into the image `HEALTHCHECK` (so `docker compose ps` reports health).
   Answers: is the port accepting connections?
+- **Sidecar sync-freshness healthcheck** — the `obsidian-sync` image's
+  `HEALTHCHECK`, asserting that `ob`'s sync log has been written recently.
+  Answers: is Obsidian Sync actually still syncing? A liveness probe cannot
+  answer this: a wedged `ob` keeps its process alive. Window:
+  `SYNC_STALE_AFTER`, default 180s. See `obsidian-sync/README.md`.
 - **Upstream liveness heartbeat** (`VAULT_MCP_HEARTBEAT_URL`) — the upstream
   server's outbound liveness ping. Answers: is the server process alive?
 - **Git-sync push heartbeat** (`VAULT_GIT_HEARTBEAT_URL`) — fired by the
   worker after each successful push. Answers: is sync actually reaching the
   remote? (Never fires in commit-only mode.)
+
+**Detection is not recovery.** Neither Docker nor Compose restarts a container
+because it went unhealthy — `restart: unless-stopped` acts on a process that
+*exits*, and a hung process never does. To turn an unhealthy verdict into a
+restart you need something watching health: an orchestrator configured to act on
+it, Swarm, or an external supervisor.
 
 ## Development
 
