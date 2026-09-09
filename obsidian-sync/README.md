@@ -9,7 +9,7 @@ The sidecar is **opt-in** via the Compose `obsidian` profile. A plain
 `docker compose up` runs only `mcp`; the sidecar starts only with
 `--profile obsidian`.
 
-- Image: `obsidian-sync/Dockerfile` (`node:22-bookworm-slim`, `obsidian-headless@0.0.12`).
+- Image: `obsidian-sync/Dockerfile` (`node:22-bookworm-slim`, `obsidian-headless@0.0.14`).
 - It mounts the **same** vault working tree as `mcp` (`${VAULT_HOST_PATH}:${VAULT_PATH}`),
   so a device edit synced down by `ob` lands on disk and the git-sync worker's
   sweep commits it.
@@ -104,7 +104,7 @@ bootstrap completes — no manual restart.
 directory wipe is the reliable reset; `--reset` guards the path so it can never
 run against `/` or an empty value.)
 
-## `ob` command reference (captured from `obsidian-headless@0.0.12`)
+## `ob` command reference (captured from `obsidian-headless@0.0.14`)
 
 ```
 login           Login to Obsidian account or display login status
@@ -118,3 +118,6 @@ sync-status     Show sync status for a vault
 sync-unlink     Disconnect a vault from sync and remove stored credentials
 sync            Sync a vault (--continuous for long-running mode)
 ```
+
+Most commands also accept `--json` (added in `0.0.14`); `sync-status` reports
+static configuration only, not live connection state.

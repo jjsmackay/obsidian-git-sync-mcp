@@ -20,9 +20,10 @@ FROM node:22-bookworm-slim
 #       && apt-get install -y --no-install-recommends python3 make g++ \
 #       && rm -rf /var/lib/apt/lists/*
 #
-# Confirmed at build time (obsidian-headless@0.0.12): the prebuilt path works, so
-# the toolchain is intentionally omitted to keep the image slim.
-RUN npm install -g obsidian-headless@0.0.12 \
+# Confirmed at build time (obsidian-headless@0.0.14, better-sqlite3 12.11.1): the
+# prebuilt path works, so the toolchain is intentionally omitted to keep the
+# image slim.
+RUN npm install -g obsidian-headless@0.0.14 \
     && npm cache clean --force
 
 # Run as a non-root user with a stable HOME so `ob` writes its config + sync
