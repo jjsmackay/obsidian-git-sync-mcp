@@ -8,12 +8,12 @@ fail-closed message instead of a raw traceback out of ``before_indexes_start``
 (which still backstops it).
 
 It is also the process's assembly point, so it is where extension COMPOSITION
-lives. Upstream's seam gives every extension its own entry point calling
-``serve([YourExtension()])`` and no way to run two, so an operator naming
-additional extensions in ``VAULT_MCP_EXTENSIONS`` gets them appended after
-``GitSyncExtension`` in the single ``serve()`` call here. Resolution runs in the
-same fail-closed block as the git-sync validation, so a bad declaration refuses
-the boot rather than raising mid-startup.
+happens: an operator naming additional extensions in ``VAULT_MCP_EXTENSIONS``
+gets them appended after ``GitSyncExtension`` in the single ``serve()`` call
+here. The loading itself lives in ``extension_hosting``; this module only
+decides the order and runs the load inside the same fail-closed block as the
+git-sync validation, so a bad declaration refuses the boot rather than raising
+mid-startup.
 """
 
 import logging
@@ -23,6 +23,7 @@ from obsidian_vault_mcp.server import serve
 
 from . import config
 from .extension import GitSyncExtension
+from .extension_hosting import load_extra_extensions
 
 logger = logging.getLogger(__name__)
 
@@ -34,26 +35,26 @@ def main() -> None:
     # One fail-closed block over every startup check: each ValueError already
     # names its own offending variable, so a shared prefix loses nothing and the
     # next validated concern joins by adding a line rather than another block.
-    # extra_extensions() is called separately from validate_gitsync() because
-    # that one returns early when git sync is disabled, and a declared extension
-    # must load either way.
+    # load_extra_extensions() is called separately from validate_gitsync()
+    # because that one returns early when git sync is disabled, and a declared
+    # extension must load either way.
     try:
         config.validate_gitsync()
-        extra_classes = config.extra_extensions()
+        extras = load_extra_extensions()
     except ValueError as e:
         logger.error(f"Invalid configuration: {e}")
         sys.exit(1)
 
-    if extra_classes:
+    if extras:
         logger.info(
             "Loading additional extensions from VAULT_MCP_EXTENSIONS: %s",
-            ", ".join(f"{cls.__module__}:{cls.__qualname__}" for cls in extra_classes),
+            ", ".join(f"{type(x).__module__}:{type(x).__qualname__}" for x in extras),
         )
 
     # GitSyncExtension stays FIRST so its hook runs before any declared
     # extension's at each upstream lifecycle stage; declared extensions follow in
     # declaration order, the only ordering an operator can reason about.
-    serve([ext, *(cls() for cls in extra_classes)])
+    serve([ext, *extras])
 
 
 if __name__ == "__main__":
