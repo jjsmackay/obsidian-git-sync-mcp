@@ -14,6 +14,7 @@ and join the thread so no daemon leaks.
 
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 import time
@@ -26,36 +27,23 @@ from obsidian_git_sync.extension import GitSyncExtension
 from obsidian_git_sync.git_ops import GitOps
 from obsidian_git_sync.worker import GitWorker, _mcp_message
 
+from _helpers import (
+    WORKER_LOGGER, fixed_rc, git, make_lock, make_worker, records, start_extension, warnings,
+)
+
 
 # --- Helpers -------------------------------------------------------------------
-
-def _git(cwd, *args) -> str:
-    return subprocess.run(
-        ["git", "-C", str(cwd), *args],
-        check=True, capture_output=True, text=True,
-    ).stdout
 
 
 def _log_messages(repo) -> list[str]:
     """Commit subjects in a repo (or a ref), newest first."""
-    out = _git(repo, "log", "--format=%s")
+    out = git(repo, "log", "--format=%s")
     return [line for line in out.splitlines() if line]
 
 
 def _bare_log(bare, ref="refs/heads/main") -> list[str]:
-    out = _git(bare, "log", "--format=%s", ref)
+    out = git(bare, "log", "--format=%s", ref)
     return [line for line in out.splitlines() if line]
-
-
-def _make_ops(vault) -> GitOps:
-    """A GitOps with a committer identity so commits succeed in CI-like envs."""
-    return GitOps(vault, author_name="Worker Bot", author_email="worker@example.com")
-
-
-def _worker(events, vault, **kw) -> GitWorker:
-    kw.setdefault("push_debounce", 0.05)
-    kw.setdefault("push_max_interval", 1000)  # don't force pushes by interval in tests
-    return GitWorker(events, _make_ops(vault), **kw)
 
 
 def _wait_until(predicate, timeout=5.0, interval=0.02):
@@ -91,7 +79,7 @@ def test_mcp_write_single_path_commit(git_remote_vault):
     vault, _bare = git_remote_vault
     (vault / "a.md").write_text("hello\n")
 
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     w._handle_event(SyncEvent.mcp_write("updated", ["a.md"]))
 
     assert _log_messages(vault)[0] == "mcp: updated a.md"
@@ -106,7 +94,7 @@ def test_mcp_write_many_paths_summarised(git_remote_vault):
         (vault / name).write_text(name)
         paths.append(name)
 
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     w._handle_event(SyncEvent.mcp_write("created", paths))
 
     assert _log_messages(vault)[0] == "mcp: created a.md, b.md, c.md (+1 more)"
@@ -117,7 +105,7 @@ def test_mcp_write_nothing_staged_no_commit(git_remote_vault):
     vault, _bare = git_remote_vault
     before = _log_messages(vault)
 
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     # "a.md" was never created/changed, so add stages nothing.
     w._handle_event(SyncEvent.mcp_write("updated", ["a.md"]))
 
@@ -132,7 +120,7 @@ def test_sync_sweep_dirty_commits_with_timestamp(git_remote_vault):
     vault, _bare = git_remote_vault
     (vault / "attachment.png").write_bytes(b"\x89PNG fake")
 
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     w._handle_event(SyncEvent.sync_sweep("timer"))
 
     subject = _log_messages(vault)[0]
@@ -145,7 +133,7 @@ def test_sync_sweep_clean_is_noop(git_remote_vault):
     vault, _bare = git_remote_vault
     before = _log_messages(vault)
 
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     w._handle_event(SyncEvent.sync_sweep("timer"))
 
     assert _log_messages(vault) == before
@@ -157,7 +145,7 @@ def test_mcp_write_then_sweep_no_duplicate(git_remote_vault):
     vault, _bare = git_remote_vault
     (vault / "a.md").write_text("body\n")
 
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
     after_mcp = _log_messages(vault)
     # Tree is now clean; a sweep should find nothing.
@@ -172,7 +160,7 @@ def test_push_batches_multiple_commits_after_quiet(git_remote_vault):
     """Several events then quiet -> exactly one push delivers all commits."""
     vault, bare = git_remote_vault
     events = EventQueue()
-    w = _worker(events, vault, remote="origin", branch="main")
+    w = make_worker(events, vault, remote="origin", branch="main")
     w.start()
     try:
         for name in ("a.md", "b.md", "c.md"):
@@ -196,7 +184,7 @@ def test_commit_only_mode_no_push(git_remote_vault):
     before_remote = _bare_log(bare)
 
     events = EventQueue()
-    w = _worker(events, vault, remote="", branch="main")  # commit-only
+    w = make_worker(events, vault, remote="", branch="main")  # commit-only
     w.start()
     try:
         (vault / "a.md").write_text("x")
@@ -220,20 +208,20 @@ def test_diverged_remote_rebased_local_wins_no_markers(git_remote_vault, tmp_pat
     # Make a diverging commit directly via a second clone and push it to origin,
     # touching the SAME file the worker will also change -> a content conflict.
     other = tmp_path / "other"
-    _git(tmp_path, "clone", str(bare), str(other))
+    git(tmp_path, "clone", str(bare), str(other))
     # The bare repo's HEAD may name a different default branch, so the clone lands
     # on that; check out main (tracking origin/main) explicitly.
-    _git(other, "checkout", "main")
-    _git(other, "config", "user.name", "Other")
-    _git(other, "config", "user.email", "other@example.com")
+    git(other, "checkout", "main")
+    git(other, "config", "user.name", "Other")
+    git(other, "config", "user.email", "other@example.com")
     (other / "shared.md").write_text("remote version\n")
-    _git(other, "add", "-A")
-    _git(other, "commit", "-m", "remote: shared")
-    _git(other, "push", "origin", "main")
+    git(other, "add", "-A")
+    git(other, "commit", "-m", "remote: shared")
+    git(other, "push", "origin", "main")
 
     # Local change to the same file, then drive a single push cycle synchronously.
     (vault / "shared.md").write_text("local version\n")
-    w = _worker(EventQueue(), vault, remote="origin", branch="main")
+    w = make_worker(EventQueue(), vault, remote="origin", branch="main")
     w._handle_event(SyncEvent.mcp_write("created", ["shared.md"]))
     w._maybe_push()
 
@@ -255,11 +243,10 @@ def test_rebase_failure_aborts_clean_and_worker_survives(git_remote_vault, monke
     vault, bare = git_remote_vault
     (vault / "a.md").write_text("local\n")
 
-    w = _worker(EventQueue(), vault, remote="origin", branch="main")
+    w = make_worker(EventQueue(), vault, remote="origin", branch="main")
     w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
 
     # Force the rebase to "fail" so we exercise the abort path deterministically.
-    from obsidian_git_sync.git_ops import GitResult
     real_abort = w.git.rebase_abort
     abort_called = {"n": 0}
 
@@ -267,7 +254,7 @@ def test_rebase_failure_aborts_clean_and_worker_survives(git_remote_vault, monke
         abort_called["n"] += 1
         return real_abort()
 
-    monkeypatch.setattr(w.git, "rebase_theirs", lambda r, b: GitResult(1, "", "boom"))
+    monkeypatch.setattr(w.git, "rebase_theirs", fixed_rc(1))
     monkeypatch.setattr(w.git, "rebase_abort", counting_abort)
 
     w._maybe_push()
@@ -291,16 +278,16 @@ def test_failing_push_logged_and_later_push_succeeds(git_remote_vault, tmp_path)
     vault, bare = git_remote_vault
     (vault / "a.md").write_text("x")
 
-    w = _worker(EventQueue(), vault, remote="origin", branch="main")
+    w = make_worker(EventQueue(), vault, remote="origin", branch="main")
     w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
 
     # Break origin: point it at a non-existent path so fetch+push fail.
-    _git(vault, "remote", "set-url", "origin", str(tmp_path / "does-not-exist.git"))
+    git(vault, "remote", "set-url", "origin", str(tmp_path / "does-not-exist.git"))
     w._maybe_push()  # must not raise
     assert w._unpushed is True  # commit retained for retry
 
     # Restore origin; the next cycle pushes the retained commit.
-    _git(vault, "remote", "set-url", "origin", str(bare))
+    git(vault, "remote", "set-url", "origin", str(bare))
     w._maybe_push()
     assert w._unpushed is False
     assert "mcp: created a.md" in _bare_log(bare)
@@ -309,7 +296,7 @@ def test_failing_push_logged_and_later_push_succeeds(git_remote_vault, tmp_path)
 def test_handle_event_swallows_exceptions(git_remote_vault, monkeypatch):
     """An unexpected error inside event handling is logged + swallowed, not raised."""
     vault, _bare = git_remote_vault
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
 
     def boom(_paths):
         raise RuntimeError("disk on fire")
@@ -317,6 +304,154 @@ def test_handle_event_swallows_exceptions(git_remote_vault, monkeypatch):
     monkeypatch.setattr(w.git, "add", boom)
     # Must not raise.
     w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
+
+
+# --- Staging failures + cycle health (surface-stage-failures) ------------------
+
+def test_mcp_stage_failure_distinguishable_from_sweep(git_remote_vault, caplog):
+    """The MCP-write and sweep staging failures name their own path in the log."""
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("pending\n")
+    make_lock(vault)
+
+    with caplog.at_level("DEBUG", logger=WORKER_LOGGER):
+        make_worker(EventQueue(), vault)._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
+        make_worker(EventQueue(), vault)._handle_event(SyncEvent.sync_sweep("timer"))
+
+    msgs = warnings(caplog)
+    assert len(msgs) == 2
+    assert "mcp stage failed (rc=128)" in msgs[0]
+    assert "sweep stage failed (rc=128)" in msgs[1]
+
+
+def test_commit_failure_marks_degraded(git_remote_vault, monkeypatch):
+    """Staging succeeds but the commit fails -> degraded, nothing unpushed."""
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("pending\n")
+
+    w = make_worker(EventQueue(), vault)
+    monkeypatch.setattr(w.git, "commit", fixed_rc(1))
+    w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
+
+    assert w.degraded is True
+    assert w._unpushed is False
+
+
+def test_healthy_worker_not_degraded(git_remote_vault):
+    """Committing cycles and clean no-op cycles both leave the worker healthy."""
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("x\n")
+
+    w = make_worker(EventQueue(), vault)
+    w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
+    w._handle_event(SyncEvent.sync_sweep("timer"))  # clean tree
+
+    assert w.degraded is False
+
+
+def test_clean_cycle_clears_degraded_and_logs_one_info(git_remote_vault, caplog):
+    """A failing cycle then a succeeding one -> not degraded, one recovery info line."""
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("pending\n")
+    lock = make_lock(vault)
+
+    w = make_worker(EventQueue(), vault)
+    with caplog.at_level("DEBUG", logger=WORKER_LOGGER):
+        w._handle_event(SyncEvent.sync_sweep("timer"))
+        assert w.degraded is True
+        lock.unlink()
+        w._handle_event(SyncEvent.sync_sweep("timer"))
+        w._handle_event(SyncEvent.sync_sweep("timer"))  # already healthy: no 2nd info
+
+    assert w.degraded is False
+    infos = records(caplog, logging.INFO)
+    assert len(infos) == 1
+    assert "recovered" in infos[0].getMessage()
+
+
+def test_idle_cycle_does_not_clear_degraded(git_remote_vault):
+    """An MCP_WRITE with no paths attempts no git command, so stays degraded."""
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("pending\n")
+    lock = make_lock(vault)
+
+    w = make_worker(EventQueue(), vault)
+    w._handle_event(SyncEvent.sync_sweep("timer"))
+    lock.unlink()
+    w._handle_event(SyncEvent.mcp_write("updated", []))
+
+    assert w.degraded is True
+
+
+def test_repeated_identical_failures_warn_once(git_remote_vault, caplog):
+    """Three identical stage failures -> exactly one warning, the rest at debug."""
+    vault, _bare = git_remote_vault
+    (vault / "a.md").write_text("pending\n")
+    make_lock(vault)
+
+    w = make_worker(EventQueue(), vault)
+    with caplog.at_level("DEBUG", logger=WORKER_LOGGER):
+        for _ in range(3):
+            w._handle_event(SyncEvent.sync_sweep("timer"))
+
+    assert len(records(caplog, logging.WARNING)) == 1
+    assert len(records(caplog, logging.DEBUG)) == 2
+
+
+def test_different_exit_code_warns_as_new_event(git_vault_dir, monkeypatch, caplog):
+    """A failure with a new rc while already degraded logs at warning again."""
+    vault = git_vault_dir
+    w = make_worker(EventQueue(), vault)
+
+    with caplog.at_level("DEBUG", logger=WORKER_LOGGER):
+        monkeypatch.setattr(w.git, "add_all", fixed_rc(128))
+        w._handle_event(SyncEvent.sync_sweep("timer"))
+        monkeypatch.setattr(w.git, "add_all", fixed_rc(1))
+        w._handle_event(SyncEvent.sync_sweep("timer"))
+
+    msgs = warnings(caplog)
+    assert len(msgs) == 2
+    assert "still degraded, was rc=128" in msgs[1]
+
+
+def test_stage_timeout_marks_degraded(git_vault_dir, monkeypatch):
+    """A timed-out stage (how an orphaned lock starts) degrades the worker."""
+    vault = git_vault_dir
+    w = make_worker(EventQueue(), vault)
+
+    def hang():
+        raise subprocess.TimeoutExpired(["git"], 1)
+
+    monkeypatch.setattr(w.git, "add_all", hang)
+    w._handle_event(SyncEvent.sync_sweep("timer"))  # must not raise
+
+    assert w.degraded is True
+
+
+def test_orphaned_lock_end_to_end(git_remote_vault, caplog):
+    """The incident shape: lock -> warn, no commit, degraded; unlock -> backlog commits."""
+    vault, _bare = git_remote_vault
+    before = _log_messages(vault)
+    lock = make_lock(vault)
+    (vault / "a.md").write_text("written while wedged\n")
+    (vault / "b.png").write_bytes(b"\x89PNG backlog")
+
+    w = make_worker(EventQueue(), vault)
+    with caplog.at_level("DEBUG", logger=WORKER_LOGGER):
+        w._handle_event(SyncEvent.sync_sweep("timer"))
+    (warning,) = records(caplog, logging.WARNING)
+    assert "sweep stage failed (rc=128)" in warning.getMessage()
+    assert _log_messages(vault) == before
+    assert w._unpushed is False
+    assert w.degraded is True
+
+    lock.unlink()
+    w._handle_event(SyncEvent.sync_sweep("timer"))
+
+    assert _log_messages(vault)[0].startswith("sync: auto ")
+    assert set(git(vault, "show", "--name-only", "--format=", "HEAD").split()) == {"a.md", "b.png"}
+    assert not w.git.is_dirty()
+    assert w.degraded is False
 
 
 # --- Frontmatter stamping in the MCP-write commit (frontmatter-stamping) -------
@@ -330,12 +465,12 @@ def test_mcp_write_stamped_within_commit(git_remote_vault, monkeypatch):
     vault, _bare = git_remote_vault
     (vault / "a.md").write_text("---\ntitle: hi\n---\nbody\n")
 
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     w._handle_event(SyncEvent.mcp_write("updated", ["a.md"]))
 
     assert _log_messages(vault)[0] == "mcp: updated a.md"
     # Read the committed blob back from HEAD (not just the working tree).
-    committed = _git(vault, "show", "HEAD:a.md")
+    committed = git(vault, "show", "HEAD:a.md")
     assert _MODIFIED_RE.search(committed), committed
     assert "modified: '" not in committed  # unquoted
 
@@ -346,7 +481,7 @@ def test_mcp_write_deleted_not_stamped(git_remote_vault, monkeypatch):
     vault, _bare = git_remote_vault
     # Commit a file, then delete it on disk and fire a deleted MCP_WRITE.
     (vault / "gone.md").write_text("---\ntitle: hi\n---\nbody\n")
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     w._handle_event(SyncEvent.mcp_write("created", ["gone.md"]))
 
     # Spy on the stamper: a deleted op must not call it.
@@ -374,7 +509,7 @@ def test_sweep_does_not_stamp(git_remote_vault, monkeypatch):
         "obsidian_git_sync.worker.stamping.stamp_paths",
         lambda paths: called.__setitem__("n", called["n"] + 1),
     )
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     w._handle_event(SyncEvent.sync_sweep("timer"))
 
     assert called["n"] == 0
@@ -387,10 +522,10 @@ def test_stamping_disabled_commits_file_verbatim(git_remote_vault, monkeypatch):
     written = "---\ntitle: hi\n---\nbody\n"
     (vault / "a.md").write_text(written)
 
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     w._handle_event(SyncEvent.mcp_write("updated", ["a.md"]))
 
-    committed = _git(vault, "show", "HEAD:a.md")
+    committed = git(vault, "show", "HEAD:a.md")
     assert committed == written  # no modified added
 
 
@@ -401,41 +536,36 @@ def test_mcp_write_malformed_frontmatter_still_committed(git_remote_vault, monke
     written = "---\na: b: c\n---\nbody\n"
     (vault / "bad.md").write_text(written)
 
-    w = _worker(EventQueue(), vault)
+    w = make_worker(EventQueue(), vault)
     w._handle_event(SyncEvent.mcp_write("updated", ["bad.md"]))  # must not raise
 
     # Committed, and unstamped (the stamp failed fail-soft).
     assert _log_messages(vault)[0] == "mcp: updated bad.md"
-    assert _git(vault, "show", "HEAD:bad.md") == written
+    assert git(vault, "show", "HEAD:bad.md") == written
 
 
 # --- Disabled starts no worker (spec: Single git-worker consumer thread) -------
 
 def test_disabled_starts_no_worker(gitsync_disabled, vault_dir):
     """Disabled extension -> no worker thread is created and no git is invoked."""
-    from obsidian_vault_mcp.frontmatter_index import FrontmatterIndex
-
     ext = GitSyncExtension()
-    ext.before_indexes_start(FrontmatterIndex())
-    ext.after_indexes_start(FrontmatterIndex())
+    start_extension(ext)
 
     assert ext._worker is None
     ext.shutdown()  # safe with no worker
 
 
-def test_enabled_extension_starts_one_worker(gitsync_enabled, git_remote_vault, monkeypatch):
+def test_enabled_extension_starts_one_worker(
+    gitsync_enabled, git_remote_vault, fast_worker_shutdown, monkeypatch
+):
     """Enabled -> after_indexes_start starts exactly one worker thread; shutdown stops it."""
-    from obsidian_vault_mcp.frontmatter_index import FrontmatterIndex
-
     # gitsync_enabled defaults REMOTE="" (commit-only); this vault has a real
     # origin, so allow the worker to use it and validate against it.
     monkeypatch.setattr(config, "VAULT_GIT_REMOTE", "origin")
     monkeypatch.setattr(config, "VAULT_GIT_BRANCH", "main")
-    monkeypatch.setattr(config, "VAULT_GIT_PUSH_DEBOUNCE", "0.05")
 
     ext = GitSyncExtension()
-    ext.before_indexes_start(FrontmatterIndex())
-    ext.after_indexes_start(FrontmatterIndex())
+    start_extension(ext)
     try:
         assert ext._worker is not None
         assert ext._worker._thread is not None
@@ -502,7 +632,7 @@ def test_token_empty_when_unset(monkeypatch):
 
 def _set_remote_url(vault, url, monkeypatch):
     """Point ``origin`` at ``url`` and select it as the configured remote."""
-    _git(vault, "remote", "add", "origin", url)
+    git(vault, "remote", "add", "origin", url)
     monkeypatch.setattr(config, "VAULT_GIT_REMOTE", "origin")
     monkeypatch.setattr(config, "VAULT_GIT_TOKEN", "")
 
@@ -560,7 +690,7 @@ def _isolate_git_identity(vault, monkeypatch):
         "EMAIL",
     ):
         monkeypatch.delenv(var, raising=False)
-    _git(vault, "config", "user.useConfigOnly", "true")
+    git(vault, "config", "user.useConfigOnly", "true")
 
 
 def test_validate_accepts_env_committer_identity(gitsync_enabled, git_vault_dir, monkeypatch):
@@ -576,8 +706,8 @@ def test_validate_accepts_host_committer_identity(gitsync_enabled, git_vault_dir
     _isolate_git_identity(git_vault_dir, monkeypatch)
     monkeypatch.setattr(config, "VAULT_GIT_GIT_AUTHOR_NAME", "")
     monkeypatch.setattr(config, "VAULT_GIT_GIT_AUTHOR_EMAIL", "")
-    _git(git_vault_dir, "config", "user.name", "Host User")
-    _git(git_vault_dir, "config", "user.email", "host@example.com")
+    git(git_vault_dir, "config", "user.name", "Host User")
+    git(git_vault_dir, "config", "user.email", "host@example.com")
     config.validate_gitsync()  # must not raise
 
 
@@ -686,7 +816,7 @@ def test_successful_push_fires_one_heartbeat(git_remote_vault, monkeypatch):
         "obsidian_git_sync.worker.heartbeat.ping", lambda url: pings.append(url)
     )
 
-    w = _worker(
+    w = make_worker(
         EventQueue(), vault, remote="origin", branch="main",
         heartbeat_url=_HEARTBEAT_URL,
     )
@@ -707,12 +837,12 @@ def test_failed_push_fires_no_heartbeat(git_remote_vault, tmp_path, monkeypatch)
         "obsidian_git_sync.worker.heartbeat.ping", lambda url: pings.append(url)
     )
 
-    w = _worker(
+    w = make_worker(
         EventQueue(), vault, remote="origin", branch="main",
         heartbeat_url=_HEARTBEAT_URL,
     )
     w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
-    _git(vault, "remote", "set-url", "origin", str(tmp_path / "does-not-exist.git"))
+    git(vault, "remote", "set-url", "origin", str(tmp_path / "does-not-exist.git"))
     w._maybe_push()  # must not raise
 
     assert w._unpushed is True
@@ -729,7 +859,7 @@ def test_commit_only_mode_fires_no_heartbeat(git_remote_vault, monkeypatch):
         "obsidian_git_sync.worker.heartbeat.ping", lambda url: pings.append(url)
     )
 
-    w = _worker(EventQueue(), vault, remote="", branch="main", heartbeat_url=_HEARTBEAT_URL)
+    w = make_worker(EventQueue(), vault, remote="", branch="main", heartbeat_url=_HEARTBEAT_URL)
     w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
     w._maybe_push()
 
@@ -746,7 +876,7 @@ def test_no_heartbeat_url_never_pings(git_remote_vault, monkeypatch):
         "obsidian_git_sync.worker.heartbeat.ping", lambda url: pings.append(url)
     )
 
-    w = _worker(EventQueue(), vault, remote="origin", branch="main")  # no heartbeat_url
+    w = make_worker(EventQueue(), vault, remote="origin", branch="main")  # no heartbeat_url
     w._handle_event(SyncEvent.mcp_write("created", ["a.md"]))
     w._maybe_push()
 
