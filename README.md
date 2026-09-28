@@ -266,6 +266,21 @@ because it went unhealthy — `restart: unless-stopped` acts on a process that
 restart you need something watching health: an orchestrator configured to act on
 it, Swarm, or an external supervisor.
 
+### Stale git locks
+
+If git is killed mid-command (a host freeze, an OOM kill), it can leave a lock
+file such as `.git/index.lock` behind. Every later `git add` then fails, and git
+sync stops. While running, the worker never removes a lock; instead its failure
+warning says `lock present: index.lock (age …)`. The fix happens at the **next
+restart**: before the worker starts, the extension removes any lock older than
+240s, provided no git process is running, and logs
+`removed stale lock <name> (age …)`. A lock it keeps logs `left lock … in place`
+with the reason. A removed-lock warning means an earlier git command was
+interrupted, so check the host around that time. Stop the `mcp` container before
+running git against the vault from the host: the container cannot see host
+processes, so the age threshold is all that stands between a restart and your
+live lock.
+
 ## Development
 
 ```bash
