@@ -70,6 +70,7 @@ class GitOps:
         # itself is read from the environment by the helper, so it never reaches
         # this object nor any argv.
         self.credential_helper = credential_helper
+        self._git_dir: Path | None = None  # resolved lazily by git_dir()
 
     def _run(self, *args: str) -> GitResult:
         """Run ``git -C <vault> <args>`` and capture its result.
@@ -133,6 +134,25 @@ class GitOps:
         return self._run("add", "-A")
 
     # --- Inspection --------------------------------------------------------
+
+    def git_dir(self) -> Path:
+        """The repository's git directory; ``<vault>/.git`` if git cannot say.
+
+        Resolved once and cached: the git dir never moves while we run, and the
+        worker asks for it on its failure path, which must not spawn git. The
+        common case (``.git`` is a directory) needs no subprocess anyway; a
+        ``.git`` FILE pointing elsewhere is resolved by ``rev-parse
+        --absolute-git-dir``, which takes no lock, so it works while one is stuck.
+        """
+        if self._git_dir is None:
+            dot_git = self.vault / ".git"
+            self._git_dir = dot_git
+            if not dot_git.is_dir():
+                result = self._run("rev-parse", "--absolute-git-dir")
+                out = result.stdout.strip()
+                if result.ok and out:
+                    self._git_dir = Path(out)
+        return self._git_dir
 
     def has_staged(self) -> bool:
         """True when the index holds changes to commit.

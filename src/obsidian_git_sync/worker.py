@@ -31,7 +31,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from . import config, heartbeat, stamping
+from . import config, heartbeat, locks, stamping
 from .credential_helper import HELPER_NAME
 from .events import MCP_WRITE, SYNC_SWEEP, EventQueue
 from .git_ops import GitOps
@@ -270,12 +270,21 @@ class GitWorker:
         if code != prior:
             state = "degraded" if prior is None else f"still degraded, was rc={prior}"
             logger.warning(
-                "git-worker %s failed (rc=%s); worker %s",
-                what, code, state,
+                "git-worker %s failed (rc=%s); worker %s%s",
+                what, code, state, self._lock_note(),
             )
         else:
             logger.debug("git-worker %s failed (rc=%s); worker still degraded", what, code)
         self._degraded_rc = code
+
+    def _lock_note(self) -> str:
+        """``; lock present: index.lock (age 12m)`` when a git lock exists, else "".
+
+        Names the likely cause of a failure without touching it: locks are only
+        ever removed by the startup sweep, never while the worker runs.
+        """
+        present = locks.describe_present(self.git.git_dir())
+        return f"; lock present: {present}" if present else ""
 
     def _record_clean(self) -> None:
         """Clear the degraded state after a cycle whose git commands all succeeded."""

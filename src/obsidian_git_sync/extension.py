@@ -18,7 +18,7 @@ import threading
 
 from obsidian_vault_mcp import extensions
 
-from . import config
+from . import config, locks
 from .events import EventQueue, SyncEvent
 from .worker import GitWorker
 
@@ -98,6 +98,13 @@ class GitSyncExtension(extensions.Extension):
         from obsidian_vault_mcp.config import VAULT_PATH
 
         self._worker = GitWorker.from_config(self.events, VAULT_PATH)
+        # Clear stale git locks HERE, after the worker is built but before its
+        # thread starts, so "no git process of ours is running" holds by
+        # construction. Fail-soft: a stale lock must never stop the boot.
+        try:
+            locks.sweep(self._worker.git.git_dir())
+        except Exception:
+            logger.exception("git-sync startup lock sweep failed; continuing")
         self._worker.start()
 
         interval = config.sweep_interval()
