@@ -105,6 +105,20 @@ class GitWorker:
         # Monotonic-ish wall clock of the last successful push, to enforce the
         # max-interval guard under sustained load.
         self._last_push = self._now()
+        # Cycle health: None while the last git-attempting cycle completed clean;
+        # otherwise the failure code (rc, or "timeout") of the current degraded
+        # streak. Only this thread reads or writes it, so no lock. Only a clean
+        # cycle clears it -- an idle one (no git attempted) leaves it alone.
+        self._degraded_rc: int | str | None = None
+
+    @property
+    def degraded(self) -> bool:
+        """True when the most recent cycle that attempted git work failed.
+
+        Distinguishes "nothing to commit" from "cannot commit", which look
+        identical from outside: both leave the index empty and nothing pushed.
+        """
+        return self._degraded_rc is not None
 
     @staticmethod
     def _now() -> float:
@@ -179,9 +193,6 @@ class GitWorker:
                 self._handle_mcp_write(event)
             elif event.kind == SYNC_SWEEP:
                 self._handle_sync_sweep(event)
-        except subprocess.TimeoutExpired:
-            # A wedged git command: already logged in GitOps. Move on; retry next.
-            pass
         except Exception:
             logger.exception("git-worker failed handling a %s event", event.kind)
 
@@ -205,23 +216,75 @@ class GitWorker:
                 )
             except Exception:
                 logger.exception("git-worker stamping failed; committing unstamped")
-        self.git.add(event.paths)
-        if self.git.has_staged():
-            result = self.git.commit(_mcp_message(event.operation, event.paths))
-            if result.ok:
-                self._unpushed = True
-            else:
-                logger.warning("git-worker mcp commit failed (rc=%s)", result.rc)
+        self._stage_and_commit(
+            "mcp",
+            lambda: self.git.add(event.paths),
+            _mcp_message(event.operation, event.paths),
+        )
 
     def _handle_sync_sweep(self, event) -> None:
         """``git add -A`` and commit ``sync: auto <ts>`` if the tree was dirty."""
-        self.git.add_all()
-        if self.git.has_staged():
-            result = self.git.commit(_sweep_message())
-            if result.ok:
+        self._stage_and_commit("sweep", self.git.add_all, _sweep_message())
+
+    def _stage_and_commit(self, label: str, stage, message: str) -> None:
+        """Run ``stage()``, commit what it put in the index, record cycle health.
+
+        A failed stage returns WITHOUT consulting ``has_staged()``: after a failed
+        ``git add`` the index is empty, so the question would answer "nothing
+        staged" -- the same answer a clean tree gives, which is exactly how a
+        wedged worker used to pass for an idle one.
+
+        A timed-out git command (logged in GitOps) is a failure too: a killed
+        stage is how an orphaned index.lock starts. It is caught HERE so all
+        three failure modes of a cycle share the ``<label> stage/commit`` naming.
+        """
+        step = "stage"
+        try:
+            staged = stage()
+            if not staged.ok:
+                self._record_failure(f"{label} stage", staged.rc)
+                return
+            if self.git.has_staged():
+                step = "commit"
+                result = self.git.commit(message)
+                if not result.ok:
+                    self._record_failure(f"{label} commit", result.rc)
+                    return
                 self._unpushed = True
-            else:
-                logger.warning("git-worker sweep commit failed (rc=%s)", result.rc)
+        except subprocess.TimeoutExpired:
+            self._record_failure(f"{label} {step}", "timeout")
+            return
+        self._record_clean()
+
+    # --- Cycle health ------------------------------------------------------
+
+    def _record_failure(self, what: str, code: int | str) -> None:
+        """Mark the worker degraded, logging the transition rather than each repeat.
+
+        Entering the degraded state, or a failure whose code differs from the
+        current streak's, logs at warning. A repeat of the same code logs at
+        debug: a stale lock with a ten-second cadence would otherwise write tens
+        of thousands of identical lines, burying the one that matters.
+        """
+        prior = self._degraded_rc
+        if code != prior:
+            state = "degraded" if prior is None else f"still degraded, was rc={prior}"
+            logger.warning(
+                "git-worker %s failed (rc=%s); worker %s",
+                what, code, state,
+            )
+        else:
+            logger.debug("git-worker %s failed (rc=%s); worker still degraded", what, code)
+        self._degraded_rc = code
+
+    def _record_clean(self) -> None:
+        """Clear the degraded state after a cycle whose git commands all succeeded."""
+        if self._degraded_rc is not None:
+            logger.info(
+                "git-worker recovered: cycle completed cleanly (was rc=%s)",
+                self._degraded_rc,
+            )
+        self._degraded_rc = None
 
     # --- Push policy -------------------------------------------------------
 

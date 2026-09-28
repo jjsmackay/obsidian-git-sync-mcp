@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from _helpers import git as _git
+
 
 @pytest.fixture
 def vault_dir(tmp_path, monkeypatch):
@@ -37,16 +39,6 @@ def git_vault_dir(vault_dir):
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     yield vault_dir
-
-
-def _git(cwd, *args):
-    """Run a git command in ``cwd``, raising on failure (test setup must succeed)."""
-    import subprocess
-
-    return subprocess.run(
-        ["git", "-C", str(cwd), *args],
-        check=True, capture_output=True, text=True,
-    )
 
 
 @pytest.fixture
@@ -93,6 +85,13 @@ def gitsync_enabled(monkeypatch):
     import obsidian_git_sync.config as gs_config
     monkeypatch.setattr(gs_config, "VAULT_GIT_ENABLED", "true")
     monkeypatch.setattr(gs_config, "VAULT_GIT_REMOTE", "")
+
+
+@pytest.fixture
+def fast_worker_shutdown(monkeypatch):
+    """Short push debounce so ``shutdown()``'s join doesn't wait out the 10s default."""
+    import obsidian_git_sync.config as gs_config
+    monkeypatch.setattr(gs_config, "VAULT_GIT_PUSH_DEBOUNCE", "0.05")
 
 
 @pytest.fixture(autouse=True)
