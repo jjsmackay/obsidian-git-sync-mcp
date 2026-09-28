@@ -112,12 +112,12 @@ def stamping_disabled_by_default(monkeypatch):
 def no_extra_extensions(monkeypatch):
     """Declare no additional extensions unless a test opts in.
 
-    ``config.VAULT_MCP_EXTENSIONS`` is read from the real environment at import,
-    so an operator who has it set would otherwise leak their extensions into
-    tests that assert the exact extension list handed to ``serve()``.
+    ``extension_hosting.VAULT_MCP_EXTENSIONS`` is read from the real environment
+    at import, so an operator who has it set would otherwise leak their
+    extensions into tests that assert the exact list handed to ``serve()``.
     """
-    import obsidian_git_sync.config as gs_config
-    monkeypatch.setattr(gs_config, "VAULT_MCP_EXTENSIONS", "")
+    import obsidian_git_sync.extension_hosting as hosting
+    monkeypatch.setattr(hosting, "VAULT_MCP_EXTENSIONS", "")
 
 
 @pytest.fixture(autouse=True)

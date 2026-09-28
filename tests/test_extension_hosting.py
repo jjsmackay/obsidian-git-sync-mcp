@@ -1,7 +1,7 @@
 """Tests for operator-declared additional extensions (VAULT_MCP_EXTENSIONS).
 
 One test (or small group) per spec scenario in
-``openspec/changes/load-additional-extensions/specs/extension-hosting/spec.md``:
+``openspec/specs/extension-hosting/spec.md``:
 
 - unset/empty/whitespace-only declares nothing and imports nothing
 - one and several declared extensions load, once each, in declaration order
@@ -17,7 +17,7 @@ One test (or small group) per spec scenario in
 import pytest
 
 from obsidian_vault_mcp.extensions import Extension
-from obsidian_git_sync import config
+from obsidian_git_sync import extension_hosting
 from obsidian_git_sync.extension import GitSyncExtension
 
 
@@ -39,7 +39,12 @@ _HERE = __name__
 
 
 def _declare(monkeypatch, value):
-    monkeypatch.setattr(config, "VAULT_MCP_EXTENSIONS", value)
+    monkeypatch.setattr(extension_hosting, "VAULT_MCP_EXTENSIONS", value)
+
+
+def _types(extensions):
+    """The classes behind the loaded instances -- load returns instances now."""
+    return [type(x) for x in extensions]
 
 
 @pytest.fixture
@@ -62,7 +67,7 @@ def served(monkeypatch):
 def test_empty_declares_no_extensions(monkeypatch, empty):
     """Unset, empty, whitespace-only, and comma-only values all yield no extensions."""
     _declare(monkeypatch, empty)
-    assert config.extra_extensions() == []
+    assert extension_hosting.load_extra_extensions() == []
 
 
 def test_unset_imports_nothing(monkeypatch):
@@ -72,39 +77,39 @@ def test_unset_imports_nothing(monkeypatch):
     def explode(spec):  # pragma: no cover -- proving it is never called
         raise AssertionError(f"resolution attempted for {spec!r} with nothing declared")
 
-    monkeypatch.setattr(config, "_resolve_extension", explode)
-    assert config.extra_extensions() == []
+    monkeypatch.setattr(extension_hosting, "_resolve_extension", explode)
+    assert extension_hosting.load_extra_extensions() == []
 
 
 # --- Declared extensions resolve -----------------------------------------------
 
 def test_single_declared_extension_resolves(monkeypatch):
     _declare(monkeypatch, f"{_HERE}:DummyExtension")
-    assert config.extra_extensions() == [DummyExtension]
+    assert _types(extension_hosting.load_extra_extensions()) == [DummyExtension]
 
 
 def test_several_declared_extensions_resolve_in_order(monkeypatch):
     """Declaration order is preserved, and each entry resolves once."""
     _declare(monkeypatch, f"{_HERE}:OtherExtension,{_HERE}:DummyExtension")
-    assert config.extra_extensions() == [OtherExtension, DummyExtension]
+    assert _types(extension_hosting.load_extra_extensions()) == [OtherExtension, DummyExtension]
 
 
 def test_whitespace_and_stray_commas_tolerated(monkeypatch):
     """Padding, a trailing comma, and a repeated comma are not errors."""
     _declare(monkeypatch, f"  {_HERE}:DummyExtension , , {_HERE}:OtherExtension ,")
-    assert config.extra_extensions() == [DummyExtension, OtherExtension]
+    assert _types(extension_hosting.load_extra_extensions()) == [DummyExtension, OtherExtension]
 
 
 def test_inner_whitespace_tolerated(monkeypatch):
     """Padding around the separator is stripped, not validated as malformed."""
     _declare(monkeypatch, f"{_HERE} : DummyExtension")
-    assert config.extra_extensions() == [DummyExtension]
+    assert _types(extension_hosting.load_extra_extensions()) == [DummyExtension]
 
 
 def test_repeated_entry_resolves_twice(monkeypatch):
     """A duplicate declaration is left visible rather than silently de-duplicated."""
     _declare(monkeypatch, f"{_HERE}:DummyExtension,{_HERE}:DummyExtension")
-    assert config.extra_extensions() == [DummyExtension, DummyExtension]
+    assert _types(extension_hosting.load_extra_extensions()) == [DummyExtension, DummyExtension]
 
 
 # --- Every rejection mode fails closed, naming the entry -----------------------
@@ -130,14 +135,14 @@ def test_repeated_entry_resolves_twice(monkeypatch):
 def test_bad_entry_rejected(monkeypatch, spec, match):
     _declare(monkeypatch, spec)
     with pytest.raises(ValueError, match=match):
-        config.extra_extensions()
+        extension_hosting.load_extra_extensions()
 
 
 def test_error_names_the_offending_entry(monkeypatch):
     """The message identifies WHICH entry was rejected, not just that one was."""
     _declare(monkeypatch, f"{_HERE}:DummyExtension,{_HERE}:NoSuchClass")
     with pytest.raises(ValueError, match="NoSuchClass"):
-        config.extra_extensions()
+        extension_hosting.load_extra_extensions()
 
 
 # --- The entry point composes and fails closed ---------------------------------
