@@ -24,10 +24,12 @@ VAULT_PATH="${VAULT_PATH:-/vault}"
 CONFIG_DIR="${HOME:-/home/ob}/.config/obsidian-headless"
 SYNC_POLL_INTERVAL="${SYNC_POLL_INTERVAL:-5}"
 
-# Heuristic: ob writes credentials + per-vault state under CONFIG_DIR, so a
-# non-empty dir means login/sync-setup has run. The image pre-creates the dir
-# empty, so "empty" reliably means "not yet bootstrapped".
-is_bootstrapped() { [ -n "$(ls -A "$CONFIG_DIR" 2>/dev/null)" ]; }
+# Bootstrapped means sync-setup has run, which creates a per-vault directory
+# under CONFIG_DIR/sync/. Login alone writes only auth_token, so checking for a
+# non-empty CONFIG_DIR started sync mid-bootstrap (between `ob login` and
+# `sync-setup`): `ob sync` exited "no sync configuration", the container
+# restarted and the operator's interactive bootstrap session was killed.
+is_bootstrapped() { [ -n "$(ls -A "$CONFIG_DIR/sync" 2>/dev/null)" ]; }
 
 if [ "${1:-}" = "bootstrap" ]; then
   shift               # drop the 'bootstrap' token, forward the rest (e.g. --reset)

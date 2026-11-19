@@ -67,9 +67,9 @@ against the persisted volume, and the long-running command the service uses.
 
 ### Requirement: Idle sidecar auto-starts sync once bootstrapped
 
-When the sidecar starts un-bootstrapped (no config in the persisted config dir) and no explicit command is given, the entry point SHALL print the bootstrap instructions once and then poll for config rather than idling forever. As soon
-as the config dir becomes non-empty — i.e. an operator has run the explicit
-`bootstrap` against the running container — the entry point SHALL start
+When the sidecar starts un-bootstrapped (no vault configured by `ob sync-setup` in the persisted config dir) and no explicit command is given, the entry point SHALL print the bootstrap instructions once and then poll for config rather than idling forever. As soon
+as a vault is configured — i.e. an operator has run the explicit `bootstrap`
+against the running container through to `sync-setup` — the entry point SHALL start
 continuous sync itself (`ob sync --path "$VAULT_PATH" --continuous`) without a
 manual container restart. The poll interval SHALL default to a few seconds and
 SHALL be overridable via an environment variable. The entry point SHALL NOT
@@ -77,13 +77,15 @@ auto-run bootstrap: it only auto-starts sync once config exists, preserving the
 explicit-only bootstrap contract (a detected TTY must not trigger an interactive
 login). The existing branches — explicit `bootstrap` arg / `BOOTSTRAP` env,
 explicit passthrough command, and already-bootstrapped → continuous sync — SHALL
-be unchanged.
+be unchanged. Login alone SHALL NOT count as bootstrapped: `ob login` writes its
+credential into the config dir before `sync-setup` runs, and treating that as
+bootstrapped starts `ob sync` with no vault configured.
 
 #### Scenario: Idle entry point begins syncing after bootstrap without a restart
 
 - **WHEN** the sidecar starts with no config and no explicit command, an operator
-  then runs the explicit `bootstrap` against the running container, and the config
-  dir becomes non-empty
+  then runs the explicit `bootstrap` against the running container through to
+  `sync-setup`
 - **THEN** the entry point detects the config on its next poll and execs
   `ob sync --path "$VAULT_PATH" --continuous`, with no manual container restart
 
@@ -114,6 +116,14 @@ be unchanged.
 - **THEN** the entry point behaves exactly as before — interactive bootstrap, the
   verbatim command, or continuous sync respectively — without entering the poll
   loop
+
+#### Scenario: Login alone does not start sync
+
+- **WHEN** an operator's interactive `bootstrap` has completed `ob login` but not
+  yet `sync-setup`, so the config dir holds a credential and no configured vault
+- **THEN** the idle entry point keeps polling and does not start `ob sync`
+- **AND** the operator's interactive bootstrap session is not interrupted by a
+  sync failure or a container restart
 
 ### Requirement: Bootstrap supports a destructive --reset for account switching
 
@@ -191,7 +201,7 @@ attached and would hang at the `ob login` prompt.
 #### Scenario: No command falls through to the start decision
 
 - **WHEN** the entry point is invoked with no explicit command
-- **THEN** it runs continuous sync if the config dir is already populated
+- **THEN** it runs continuous sync if a vault is already configured by `sync-setup`
 - **AND** otherwise prints the bootstrap instructions and idles/polls rather than
   exiting or crash-looping
 
