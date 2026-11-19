@@ -20,6 +20,11 @@ set -euo pipefail
 VAULT_PATH="${VAULT_PATH:-/vault}"
 # Same expression entrypoint.sh uses, so "where config lives" never drifts.
 CONFIG_DIR="${HOME:-/home/ob}/.config/obsidian-headless"
+# Device name shown in Sync version history. Give each sidecar its own.
+SYNC_DEVICE_NAME="${SYNC_DEVICE_NAME:-headless}"
+
+# A nested sidecar (NESTED_PARENT set) must sit strictly inside the parent vault.
+nested-guard
 
 RESET=0
 case "${1:-}" in
@@ -56,8 +61,18 @@ ob sync-list-remote
 read -rp ">> Remote vault id or name to sync: " VAULT_ID
 
 read -rsp ">> Obsidian e2e encryption password (hidden): " E2E; echo
-ob sync-setup --vault "$VAULT_ID" --path "$VAULT_PATH" --password "$E2E" --device-name headless
+ob sync-setup --vault "$VAULT_ID" --path "$VAULT_PATH" --password "$E2E" --device-name "$SYNC_DEVICE_NAME"
 unset E2E
+
+# Optional sync settings, applied only when the variable is SET (an empty value
+# clears the setting, e.g. SYNC_CONFIGS= turns settings sync off). Unset leaves
+# ob's defaults alone. See `ob sync-config --help` for the accepted values.
+if [ -n "${SYNC_CONFIGS+x}" ]; then
+  ob sync-config --path "$VAULT_PATH" --configs "$SYNC_CONFIGS"
+fi
+if [ -n "${SYNC_FILE_TYPES+x}" ]; then
+  ob sync-config --path "$VAULT_PATH" --file-types "$SYNC_FILE_TYPES"
+fi
 
 ob sync-status --path "$VAULT_PATH" || true
 

@@ -40,6 +40,7 @@ RUN npm install -g obsidian-headless@0.0.14 \
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint
 COPY --chmod=0755 bootstrap.sh /usr/local/bin/bootstrap
 COPY --chmod=0755 healthcheck.sh /usr/local/bin/healthcheck
+COPY --chmod=0755 nested-guard.sh /usr/local/bin/nested-guard
 
 RUN useradd --create-home --uid 10001 ob
 ENV HOME=/home/ob

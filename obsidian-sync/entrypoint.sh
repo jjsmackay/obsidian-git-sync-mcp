@@ -29,6 +29,9 @@ SYNC_POLL_INTERVAL="${SYNC_POLL_INTERVAL:-5}"
 # empty, so "empty" reliably means "not yet bootstrapped".
 is_bootstrapped() { [ -n "$(ls -A "$CONFIG_DIR" 2>/dev/null)" ]; }
 
+# A nested sidecar (NESTED_PARENT set) must sit strictly inside the parent vault.
+nested-guard
+
 if [ "${1:-}" = "bootstrap" ]; then
   shift               # drop the 'bootstrap' token, forward the rest (e.g. --reset)
   exec bootstrap "$@"

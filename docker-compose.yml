@@ -83,8 +83,36 @@ services:
       # image's HOME=/home/ob: $HOME/.config/obsidian-headless.
       - "config:/home/ob/.config/obsidian-headless"
 
+  # --- obsidian-sync-nested sidecar -------------------------------------------
+  # Optional second Sync client for ONE folder of the vault, synced to its own
+  # remote vault (e.g. a folder shared with a team, inside a vault they never
+  # see). The main sidecar syncs the whole vault, folder included; this one keeps
+  # the folder in step with the second remote. Same image, own config volume.
+  # Opt-in via the `nested` profile, alongside `obsidian`:
+  #   docker compose --profile obsidian --profile nested up -d
+  # Bootstrap it like the main sidecar (docker exec -it <container> bootstrap),
+  # picking the folder's remote. NESTED_SYNC_SUBPATH is the folder's path
+  # relative to the vault root; the entry point refuses to start if it is empty
+  # or outside the vault (nested-guard). See obsidian-sync/README.md.
+  obsidian-sync-nested:
+    profiles: ["nested"]
+    build: ./obsidian-sync
+    restart: unless-stopped
+    environment:
+      - "NESTED_PARENT=${VAULT_PATH:-/vault}"
+      - "VAULT_PATH=${VAULT_PATH:-/vault}/${NESTED_SYNC_SUBPATH:-}"
+      - "SYNC_DEVICE_NAME=${NESTED_SYNC_DEVICE_NAME:-headless-nested}"
+      # Settings (.obsidian) belong to the outer vault: don't sync them here.
+      - "SYNC_CONFIGS="
+    volumes:
+      - "${VAULT_HOST_PATH:-./vault}:${VAULT_PATH:-/vault}"
+      - "nested_config:/home/ob/.config/obsidian-headless"
+
 # Named volumes.
 volumes:
+  # Persists the nested sidecar's own `ob` login + sync state, kept apart from
+  # the main sidecar's so the two clients never share state.
+  nested_config:
   # Persists the obsidian-sync sidecar's `ob` config + sync state across
   # restarts. Populated by the one-time bootstrap (see obsidian-sync/README.md).
   config:

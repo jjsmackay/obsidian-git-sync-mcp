@@ -167,3 +167,41 @@ sync            Sync a vault (--continuous for long-running mode)
 
 Most commands also accept `--json` (added in `0.0.14`); `sync-status` reports
 static configuration only, not live connection state.
+
+## Nested sidecar (one folder, its own remote)
+
+`obsidian-sync-nested` is an optional second Sync client for **one folder** of
+the vault, synced to a **separate** remote vault. Use it to share a folder with
+people who must not see the rest of the vault: they open the second remote, and
+this sidecar keeps the folder and that remote in step. The main sidecar still
+syncs the whole vault, folder included.
+
+```bash
+# .env: NESTED_SYNC_SUBPATH=Team   (folder path relative to the vault root)
+docker compose --profile obsidian --profile nested up -d
+docker exec -it <stack>-obsidian-sync-nested-1 bootstrap   # pick the folder's remote
+```
+
+- Same image, own config volume (`nested_config`), so the two clients never
+  share login or sync state. `ob` keeps its lock at `<folder>/.obsidian/`,
+  and the main client skips nested dot-folders, so neither sees the other's
+  plumbing.
+- Settings sync is off for the nested client (`SYNC_CONFIGS=`): `.obsidian`
+  belongs to the outer vault.
+- `nested-guard` refuses to start (or bootstrap) unless `VAULT_PATH` is an
+  existing folder strictly inside the vault, so an empty `NESTED_SYNC_SUBPATH`
+  can never point a second client at the whole vault. Create the folder first.
+- Tested with `obsidian-headless` 0.0.14: edits, renames, moves across the
+  folder boundary, a 200-file burst and a 10-minute outage all converged with
+  nothing lost and no ping-pong. Two saves to the same note in the same instant
+  can lose one, exactly as plain Sync does without the nested client.
+
+### Bootstrap settings
+
+`bootstrap` reads these, for either sidecar:
+
+| Variable | Effect |
+|---|---|
+| `SYNC_DEVICE_NAME` | Device name in Sync version history (default `headless`) |
+| `SYNC_CONFIGS` | If set, passed to `ob sync-config --configs` (empty = no settings sync) |
+| `SYNC_FILE_TYPES` | If set, passed to `ob sync-config --file-types` |
